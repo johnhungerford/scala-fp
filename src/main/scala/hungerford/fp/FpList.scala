@@ -50,7 +50,7 @@ sealed abstract class FpList[ +T ] extends Monoid[ FpList[ T ] ] with Monad[ FpL
         case _ => throw new Exception
     }
 
-    override def unit[ C >: FpList[ T ], B >: T ]( ele : B ) : Monad[ C, B ] = List( FpNil, ele ).asInstanceOf[ Monad[ C, B ] ]
+    override def unit[ C >: FpList[ T ], B >: T ]( ele : B ) : Monad[ C, B ] = FpList( FpNil, ele ).asInstanceOf[ Monad[ C, B ] ]
 
     override def flatMap[ C, B ]( fn : T => Monad[ C, B ] ) : Monad[ C, B ] = this match {
         case FpNil => FpNil.asInstanceOf[ Monad[ C, B ] ]
