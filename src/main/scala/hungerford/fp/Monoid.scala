@@ -1,6 +1,7 @@
 package hungerford.fp
 
 trait MonoidStatic[ T[ _ ] ] {
+
     def empty : T[ Nothing ]
 
     def emptyM : Monoid[ T, Nothing ] = empty.asInstanceOf[ Monoid[ T, Nothing ] ]

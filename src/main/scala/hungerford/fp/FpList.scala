@@ -2,7 +2,8 @@ package hungerford.fp
 
 import scala.annotation.tailrec
 
-sealed abstract class FpList[ +T ] extends Monad[ FpList, T ]  with Monoid[ FpList, T ] {
+abstract class FpList[ +T ] extends Monad[ FpList, T ]  with Monoid[ FpList, T ] {
+
     def tail : FpList[ T ]
     def head : T
 
@@ -37,10 +38,13 @@ sealed abstract class FpList[ +T ] extends Monad[ FpList, T ]  with Monoid[ FpLi
         else this.tail.get( i - 1 )
     }
 
-    override def toString : String = this match {
+    private def toStringInternal( list : FpList[ _ ] ) : String = list match {
         case FpNil => "FpNil"
-        case _ => s"${this.tail} + ${this.head}"
+        case FpList( FpNil, v ) => v.toString
+        case _ => s"${toStringInternal( list.tail )}, ${list.head}"
     }
+
+    override def toString : String = s"[ ${toStringInternal( this )} ]"
 
     override def empty : FpList[ Nothing ] = FpList.empty
 
@@ -55,6 +59,7 @@ sealed abstract class FpList[ +T ] extends Monad[ FpList, T ]  with Monoid[ FpLi
 }
 
 object FpList extends MonadStatic[ FpList ] with MonoidStatic[ FpList ] {
+
     def apply : FpNil.type = FpNil
     def apply[ T ]( tailIn : FpList[ T ], headIn : T ) : FpList[ T ] = new FpList[ T ] {
         override def tail : FpList[ T ] = tailIn
@@ -86,11 +91,14 @@ object FpList extends MonadStatic[ FpList ] with MonoidStatic[ FpList ] {
         case FpNil => None
         case FpList( _, v : A ) => Some( v )
     }
+
 }
 
 case object FpNil extends FpList[ Nothing ] {
+
     override def head : Nothing = throw new Exception
     override def tail : FpList[ Nothing ] = throw new Exception
+
 }
 
 

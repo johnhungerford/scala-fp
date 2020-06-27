@@ -16,7 +16,7 @@ trait FpWriter[ T, A[ _ ], B ] extends Monad[ ({ type U[ X ] = FpWriter[ X, A, B
 
     override def get[ C ]( ele : FpWriter[ C, A, B ] ) : Option[ C ] = Some( ele.value )
 
-    override def toString() : String = s"FpWriter( ${value}, ${context} )"
+    override def toString : String = s"FpWriter( ${value}, ${context} )"
 }
 
 object FpWriter {
