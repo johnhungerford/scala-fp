@@ -1,12 +1,20 @@
 package hungerford.fp
 
-trait Monoid [ +T ] {
-    def empty : T
-    def combine[ B >: T ]( ele : B ) : B
-    def concat[ B >: T ]( eles : FpList[ B ] ) : B = eles match {
-        case FpNil => empty
-        case FpList( FpNil, head : B ) => head
-        case FpList( fpList : FpList[ B ], head : B ) => concat( fpList ).asInstanceOf[ Monoid[ B ] ].combine( head )
+trait MonoidStatic [ T[ _ ], +A ] {
+    def empty : T[ Nothing ]
+    def combine[ B >: A ]( a : T[ B ], b : T[ B ] ) : T[ B ]
+
+    def concat[ B >: A ]( eles : FpList[ T[ B ] ] ) : T[ B ] = eles match {
+        case FpNil => empty.asInstanceOf[ T[ B ] ]
+        case FpList( FpNil, head : T[ B ] ) => head
+        case FpList( fpList : FpList[ T[ B ] ], head : T[ B ] ) => combine( concat( fpList ), head )
     }
+}
+
+trait Monoid[ T[ _ ], +A ] extends MonoidStatic[ T, A ] {
+
+    this : T[ A ] =>
+        def combine[ B >: A ]( a : T[ B ] ) : T[ B ] = combine( this.asInstanceOf[ T[ B ] ], a )
+
 }
 
