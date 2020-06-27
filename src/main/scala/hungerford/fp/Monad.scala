@@ -1,9 +1,17 @@
 package hungerford.fp
 
-trait Monad [ +T, +A ] {
-    def flatMap[ C, B ]( fn : A => Monad[ C, B ] ) : Monad[ C, B ]
-    def map[ C, B ]( fn : A => B ) : Monad[ C, B ] = flatMap( ( ele : A ) => unit( fn( ele ) ).asInstanceOf[ Monad[ C, B ] ] )
+trait MonadStatic [ T[ _ ] ] extends ApplicativeStatic[ T ] {
 
-    def sub[ C >: T, B ]( ele : Monad[ C, B ] ) : Monad[ C, B ] = flatMap( _ => ele )
-    def unit[ C >: T, B >: A ]( ele : B ) : Monad[ C, B ]
+    def flatMap[ A, B ]( a : T[ A ] )( fn : A => T[ B ] ) : T[ B ]
+
+    override def map[ A, B ]( ele : T[ A ] )( fn : A => B ) : T[ B ] = flatMap( ele )( a => unit( fn( a ) ) )
+
+    def sub[ X, Y ]( a : T[ X ], b : T[ Y ] ) : T[ Y ] = flatMap( a )( ( _ : X ) => b )
+
 }
+
+trait Monad [ T[ _ ], +A ] extends MonadStatic[ T ] with Applicative[ T, A ] {
+    this : T[ A ] =>
+        def flatMap[ A, B ]( fn : A => T[ B ] ) : T[ B ] = flatMap( this )( fn )
+}
+
