@@ -1,6 +1,6 @@
 package hungerford.fp
 
-trait MonadStatic [ T[ _ ] ] extends ApplicativeStatic[ T ] {
+trait MonadStatic[ T[ _ ] ] extends ApplicativeStatic[ T ] {
 
     def flatMap[ A, B ]( a : T[ A ] )( fn : A => T[ B ] ) : T[ B ]
 
@@ -10,8 +10,8 @@ trait MonadStatic [ T[ _ ] ] extends ApplicativeStatic[ T ] {
 
 }
 
-trait Monad [ T[ _ ], +A ] extends MonadStatic[ T ] with Applicative[ T, A ] {
-    this : T[ A ] =>
-        def flatMap[ A, B ]( fn : A => T[ B ] ) : T[ B ] = flatMap( this )( fn )
+trait Monad[ T[ _ ], +A ] extends MonadStatic[ T ] with Applicative[ T, A ] { this : T[ _ ] =>
+
+    def flatMap[ B ]( fn : A => T[ B ] ) : T[ B ] = flatMap( this.asInstanceOf[ T[ A ] ] )( fn )
 }
 

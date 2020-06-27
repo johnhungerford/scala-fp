@@ -39,12 +39,12 @@ sealed abstract class FpList[ +T ] extends Monad[ FpList, T ]  with Monoid[ FpLi
 
     override def toString : String = this match {
         case FpNil => "FpNil"
-        case _ => s"${this.tail}, ${this.head}"
+        case _ => s"${this.tail} + ${this.head}"
     }
 
     override def empty : FpList[ Nothing ] = FpList.empty
 
-    override def combine[ B >: T ]( a : FpList[ B ], b : FpList[ B ] ) : FpList[ B ] = FpList.combine( a, b )
+    override def combine[ B ]( a : FpList[ B ], b : FpList[ B ] ) : FpList[ B ] = FpList.combine( a, b )
 
     override def unit[ A ]( ele : A ) : FpList[ A ] = FpList.unit( ele )
 
