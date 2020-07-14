@@ -10,7 +10,15 @@ trait ApplicativeStatic[ T[_] ] {
 
 }
 
-trait Applicative[ T[ _ ], +A ] extends ApplicativeStatic[ T ] { this : T[ _ ] =>
+trait Applicative[ T[ _ ], A ] extends ApplicativeStatic[ T ] { this : T[ A ] =>
+
+    def map[ B ]( fn : A => B ) : T[ B ] = map( this )( fn )
+
+    def get : Option[ A ] = get( this )
+
+}
+
+trait ApplicativeCovariant[ T[ _ ], +A ] extends ApplicativeStatic[ T ] { this : T[ _ ] =>
 
     def map[ B ]( fn : A => B ) : T[ B ] = map( this.asInstanceOf[ T[ A ] ] )( fn )
 
