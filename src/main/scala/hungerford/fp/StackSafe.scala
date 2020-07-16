@@ -36,4 +36,21 @@ object StackSafe {
                 run( y.flatMap( g( _ ).flatMap( f ) ) )
         }
     }
+
+    private def Y[A,Z](fn: (A=>Z)=>(A=>Z)): A=>Z = StackSafe {
+        def YT(f: (A=>Z)=>(A=>Z)): StackSafe[ A=>Z ] = Call.from {
+            YT( f ).map( res => f( res )( _ ) )
+        }
+
+        YT( fn )
+    }
+
+    def recur1[ A, B ]( f : (A => StackSafe[ B ]) => (A => StackSafe[ B ]) ) : ( A ) => B = (a : A) => StackSafe {
+        Y( f )( a )
+    }
+
+    def fac = recur1[ Int, Int ]( f => a => {
+        if (a <= 0) Result( 1 )
+        else Call.from( f(a - 1).map( _ * a ) )
+    })
 }

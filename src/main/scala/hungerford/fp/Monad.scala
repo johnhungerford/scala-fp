@@ -1,5 +1,7 @@
 package hungerford.fp
 
+import scala.annotation.tailrec
+
 trait MonadStatic[ T[ _ ] ] extends ApplicativeStatic[ T ] {
 
     def flatMap[ A, B ]( a : T[ A ] )( fn : A => T[ B ] ) : T[ B ]
@@ -15,7 +17,8 @@ trait Monad[ T[ _ ], A ] extends MonadStatic[ T ] with Applicative[ T, A ] { thi
 
     def flatMap[ B ]( fn : A => T[ B ] ) : T[ B ] = flatMap( this )( fn )
 
-    def autoChain( num : Int )( fn : T[ A ] => T[ A ] ) : T[ A ] =
+    @tailrec
+    final def autoChain( num : Int )( fn : T[ A ] => T[ A ] ) : T[ A ] =
         if ( num <= 0 ) this.asInstanceOf[ T[ A ] ]
         else if ( num == 1 ) fn( this.asInstanceOf[ T[ A ] ] )
         else fn( this.asInstanceOf[ T[ A ] ] ).asInstanceOf[ Monad[ T, A ] ].autoChain( num - 1 )( fn )
@@ -26,7 +29,8 @@ trait MonadCovariant[ T[ _ ], +A ] extends MonadStatic[ T ] with ApplicativeCova
 
     def flatMap[ B ]( fn : A => T[ B ] ) : T[ B ] = flatMap( this.asInstanceOf[ T[ A ] ] )( fn )
 
-    def autoChain[ B ]( num : Int )( fn : T[ B ] => T[ B ] ) : T[ B ] =
+    @tailrec
+    final def autoChain[ B ]( num : Int )( fn : T[ B ] => T[ B ] ) : T[ B ] =
         if ( num <= 0 ) this.asInstanceOf[ T[ B ] ]
         else if ( num == 1 ) fn( this.asInstanceOf[ T[ B ] ] )
         else fn( this.asInstanceOf[ T[ B ] ] ).asInstanceOf[ MonadCovariant[ T, B ] ].autoChain( num - 1 )( fn )
