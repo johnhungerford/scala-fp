@@ -17,7 +17,6 @@ trait Monad[ T[ _ ], A ] extends MonadStatic[ T ] with Applicative[ T, A ] { thi
 
     def flatMap[ B ]( fn : A => T[ B ] ) : T[ B ] = flatMap( this )( fn )
 
-    @tailrec
     final def autoChain( num : Int )( fn : T[ A ] => T[ A ] ) : T[ A ] =
         if ( num <= 0 ) this.asInstanceOf[ T[ A ] ]
         else if ( num == 1 ) fn( this.asInstanceOf[ T[ A ] ] )
@@ -29,7 +28,6 @@ trait MonadCovariant[ T[ _ ], +A ] extends MonadStatic[ T ] with ApplicativeCova
 
     def flatMap[ B ]( fn : A => T[ B ] ) : T[ B ] = flatMap( this.asInstanceOf[ T[ A ] ] )( fn )
 
-    @tailrec
     final def autoChain[ B ]( num : Int )( fn : T[ B ] => T[ B ] ) : T[ B ] =
         if ( num <= 0 ) this.asInstanceOf[ T[ B ] ]
         else if ( num == 1 ) fn( this.asInstanceOf[ T[ B ] ] )
