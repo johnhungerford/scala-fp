@@ -1,4 +1,6 @@
-package hungerford.fp
+package org.hungerford.fp.collections
+
+import org.hungerford.fp.types.Monoid
 
 import scala.annotation.tailrec
 

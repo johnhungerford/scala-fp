@@ -1,4 +1,7 @@
-package hungerford.fp
+package org.hungerford.fp.types
+
+import hungerford.fp.collections.FpNil
+import org.hungerford.fp.collections.{FpList, FpNil}
 
 import scala.annotation.tailrec
 

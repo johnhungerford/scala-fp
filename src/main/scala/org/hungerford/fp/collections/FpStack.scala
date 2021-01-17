@@ -1,4 +1,7 @@
-package hungerford.fp
+package org.hungerford.fp.collections
+
+import hungerford.fp.types.FpStateFul
+import org.hungerford.fp.types.{FpAction, FpState, FpStateFul, FpView}
 
 trait FpStack[ T ] extends FpState[ FpStack[ T ] ] {
     def internalState : FpList[ T ]

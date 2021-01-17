@@ -1,6 +1,4 @@
-package hungerford.fp
-
-import scala.annotation.tailrec
+package org.hungerford.fp.types
 
 trait MonadStatic[ T[ _ ] ] extends ApplicativeStatic[ T ] {
 

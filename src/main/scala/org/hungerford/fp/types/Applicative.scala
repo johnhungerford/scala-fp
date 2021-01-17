@@ -1,4 +1,4 @@
-package hungerford.fp
+package org.hungerford.fp.types
 
 trait ApplicativeStatic[ T[_] ] {
 

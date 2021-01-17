@@ -1,6 +1,10 @@
-package hungerford.fp
+package org.hungerford.fp.collections
 
 import hungerford.fp._
+import hungerford.fp.recursion.Call
+import hungerford.fp.types.MonadCovariant
+import org.hungerford.fp.recursion.{Call, Result, StackSafe}
+import org.hungerford.fp.types.{Monad, MonadCovariant, MonadStatic, MonoidCovariant, MonoidCovariantStatic}
 
 import scala.annotation.tailrec
 
@@ -419,4 +423,22 @@ object FpList extends MonadStatic[ FpList ] with MonoidCovariantStatic[ FpList ]
         case _ => false
     }
 
+}
+
+trait FpListInvariant[ T ] extends Monad[ FpListInvariant, T ] {
+    def list : FpList[ T ]
+}
+
+object FpListInvariant {
+    def apply[ A ]( l : FpList[ A ] ) : FpListInvariant[ A ] = new FpListInvariant[ A ] {
+        override def flatMap[ A, B ]( a : FpListInvariant[ A ] )
+                                    ( fn : A => FpListInvariant[ B ] ) : FpListInvariant[ B ] =
+            FpListInvariant( FpList.flatMap( a.list )( in => fn( in ).list ) )
+
+        override def unit[ A ]( ele : A ) : FpListInvariant[ A ] = FpListInvariant( FpNil + ele )
+
+        override def get[ A ]( ele : FpListInvariant[ A ] ) : Option[ A ] = ele.list.headOption
+
+        override def list : FpList[ A ] = l
+    }
 }

@@ -1,4 +1,4 @@
-package hungerford.fp
+package org.hungerford.fp
 
 object FpFunctions {
 

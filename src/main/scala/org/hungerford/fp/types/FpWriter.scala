@@ -1,4 +1,4 @@
-package hungerford.fp
+package org.hungerford.fp.types
 
 trait FpWriter[ T, A <: Monoid[ B ], B ] extends Monad[ ({ type U[ X ] = FpWriter[ X, A, B ] })#U, T ] {
 

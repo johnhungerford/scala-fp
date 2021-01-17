@@ -1,6 +1,6 @@
-package hungerford.fp
+package org.hungerford.fp.recursion
 
-import hungerford.fp.Monad
+import org.hungerford.fp.types.Monad
 
 import scala.annotation.tailrec
 
