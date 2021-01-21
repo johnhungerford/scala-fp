@@ -62,4 +62,22 @@ object FpTry {
     } catch {
         case t : Throwable => FpFailure( t )
     }
+
+    sealed trait FpTryT[ M[ _ ], +T ] extends MonadCovariant[ ({ type A[ B ] = FpTryT[ M, B ]})#A, T ] {
+        val value : MonadCovariant[ M, FpTry[ T ] ]
+
+        override def flatMap[ A, B ]( a : FpTryT[ M, A ] )
+                                    ( fn : A => FpTryT[ M, B ] ) : FpTryT[ M, B ] = {
+            FpTry.T[ M, B ]( a.value.flatMap { l : FpTry[ A ] => l match {
+                case FpFailure( t ) => a.value.unit( FpFailure( t ) ).asInstanceOf[ M[ FpTry[ B ] ] ]
+                case FpSuccess( v ) => fn( v ).value.asInstanceOf[ M[ FpTry[ B ] ] ]
+            } }.asInstanceOf[ MonadCovariant[ M, FpTry[ B ] ] ] )
+        }
+
+        override def unit[ A ]( ele : A ) : FpTryT[ M, A ] = FpTry.T( value.unit( FpSome( ele ) ).asInstanceOf[ MonadCovariant[ M, FpTry[ A ] ] ] )
+    }
+
+    def T[ M[ _ ], X ]( valueIn : MonadCovariant[ M, FpTry[ X ] ] ) : FpTryT[ M, X ] = new FpTryT[ M, X ] {
+        override val value : MonadCovariant[ M, FpTry[ X ] ] = valueIn
+    }
 }
