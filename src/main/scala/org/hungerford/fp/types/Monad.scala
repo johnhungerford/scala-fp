@@ -1,13 +1,16 @@
 package org.hungerford.fp.types
 
-trait MonadStatic[ T[ _ ] ] extends ApplicativeStatic[ T ] {
+import scala.annotation.tailrec
+
+trait MonadStatic[ T[ _ ] ] extends FunctorStatic[ T ] with ApplicativeStatic[ T ] {
 
     def flatMap[ A, B ]( a : T[ A ] )( fn : A => T[ B ] ) : T[ B ]
 
-    override def map[ A, B ]( ele : T[ A ] )( fn : A => B ) : T[ B ] = flatMap( ele )( a => unit( fn( a ) ) )
+    override def appl[ A, B ]( fn : A => B ) : T[ A ] => T[ B ] = {
+        (ele : T[ A ]) => flatMap( ele )( a => unit( fn( a ) ) )
+    }
 
-    def sub[ X, Y ]( a : T[ X ], b : T[ Y ] ) : T[ Y ] = flatMap( a )( ( _ : X ) => b )
-
+    final def sub[ X, Y ]( a : T[ X ], b : T[ Y ] ) : T[ Y ] = flatMap( a )( ( _ : X ) => b )
 
 }
 
@@ -20,6 +23,8 @@ trait Monad[ T[ _ ], A ] extends MonadStatic[ T ] with Applicative[ T, A ] { thi
         else if ( num == 1 ) fn( this.asInstanceOf[ T[ A ] ] )
         else fn( this.asInstanceOf[ T[ A ] ] ).asInstanceOf[ Monad[ T, A ] ].autoChain( num - 1 )( fn )
 
+    final def sub[ Y ]( repl : T[ Y ] ) : T[ Y ] = sub( this, repl )
+
 }
 
 trait MonadCovariant[ T[ _ ], +A ] extends MonadStatic[ T ] with ApplicativeCovariant[ T, A ] { this : T[ _ ] =>
@@ -30,5 +35,7 @@ trait MonadCovariant[ T[ _ ], +A ] extends MonadStatic[ T ] with ApplicativeCova
         if ( num <= 0 ) this.asInstanceOf[ T[ B ] ]
         else if ( num == 1 ) fn( this.asInstanceOf[ T[ B ] ] )
         else fn( this.asInstanceOf[ T[ B ] ] ).asInstanceOf[ MonadCovariant[ T, B ] ].autoChain( num - 1 )( fn )
+
+    final def sub[ Y ]( repl : T[ Y ] ) : T[ Y ] = sub( this.asInstanceOf[ T[ A ] ], repl )
 }
 

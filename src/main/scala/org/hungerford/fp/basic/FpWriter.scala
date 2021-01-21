@@ -1,4 +1,6 @@
-package org.hungerford.fp.types
+package org.hungerford.fp.basic
+
+import org.hungerford.fp.types.{Monad, MonadCovariant, Monoid, MonoidCovariant}
 
 trait FpWriter[ T, A <: Monoid[ B ], B ] extends Monad[ ({ type U[ X ] = FpWriter[ X, A, B ] })#U, T ] {
 
@@ -12,8 +14,6 @@ trait FpWriter[ T, A <: Monoid[ B ], B ] extends Monad[ ({ type U[ X ] = FpWrite
     }
 
     override def unit[ X ]( ele : X ) : FpWriter[ X, A, B ] = FpWriter( ele, context.empty.asInstanceOf[ A ] )
-
-    override def get[ X ]( ele : FpWriter[ X, A, B ] ) : Option[ X ] = Some( ele.value )
 
     override def toString : String = s"FpWriterCovariant( ${value}, ${context} )"
 
@@ -41,8 +41,6 @@ trait FpWriterCovariant[ T, A[ _ ], B ] extends MonadCovariant[ ({ type U[ X ] =
     }
 
     override def unit[ C ]( ele : C ) : FpWriterCovariant[ C, A, B ] = FpWriterCovariant( ele, context.emptyM )
-
-    override def get[ C ]( ele : FpWriterCovariant[ C, A, B ] ) : Option[ C ] = Some( ele.value )
 
     override def toString : String = s"FpWriterCovariant( ${value}, ${context} )"
 }

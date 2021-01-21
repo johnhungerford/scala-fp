@@ -15,8 +15,6 @@ sealed trait StackSafe[ T ] extends Monad[ StackSafe, T ] {
 
     override def flatMap[ A, B ]( a : StackSafe[ A ] )( fn : A => StackSafe[ B ] ) : StackSafe[ B ] = FlatMap( a, fn )
 
-    override def get[ A ]( ele : StackSafe[ A ] ) : Option[ A ] = Some( ele.run )
-
     override def unit[ A ]( ele : A ) : StackSafe[ A ] = Result( ele )
 
     def run : T = StackSafe.run( this )

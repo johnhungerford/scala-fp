@@ -13,7 +13,7 @@ trait FpString extends Monoid[ FpString ] {
 
   override def toString : String = toFpList.toList.mkString
 
-//  def length : Int = toFpList.length
+  def length : Int = toFpList.length
 
   def reverse : FpString = FpString( toFpList.reverse )
 
@@ -40,8 +40,8 @@ object FpString {
   }
 
   def apply( a : String ) : FpString = apply( FpList( a.toList ) )
+
+  def unapply( fpString : FpString ) : Option[ String ] = Some( fpString.toString )
+
+  implicit def stringToFpString( str : String ) : FpString = FpString( str )
 }
-
-
-
-

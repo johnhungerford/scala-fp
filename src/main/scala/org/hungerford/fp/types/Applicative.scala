@@ -1,27 +1,17 @@
 package org.hungerford.fp.types
 
-trait ApplicativeStatic[ T[_] ] {
+trait ApplicativeStatic[ T[_] ] extends FunctorStatic[ T ] {
 
-    def unit[ A ]( ele : A ) : T[ A ]
+    def appl[ A, B ]( fn : A => B ) : T[ A ] => T[ B ]
 
-    def map[ A, B ]( ele : T[ A ] )( fn : A => B ) : T[ B ]
-
-    def get[ A ]( ele : T[ A ] ) : Option[ A ]
+    override def map[ A, B ]( ele : T[ A ] )( fn : A => B ) : T[ B ] = appl( fn )( ele )
 
 }
 
-trait Applicative[ T[ _ ], A ] extends ApplicativeStatic[ T ] { this : T[ A ] =>
-
-    def map[ B ]( fn : A => B ) : T[ B ] = map( this )( fn )
-
-    def get : Option[ A ] = get( this )
+trait Applicative[ T[ _ ], A ] extends ApplicativeStatic[ T ] with Functor[ T, A ] { this : T[ A ] =>
 
 }
 
-trait ApplicativeCovariant[ T[ _ ], +A ] extends ApplicativeStatic[ T ] { this : T[ _ ] =>
-
-    def map[ B ]( fn : A => B ) : T[ B ] = map( this.asInstanceOf[ T[ A ] ] )( fn )
-
-    def get : Option[ A ] = get( this.asInstanceOf[ T[ A ] ] )
+trait ApplicativeCovariant[ T[ _ ], +A ] extends ApplicativeStatic[ T ] with FunctorCovariant[ T, A ] { this : T[ _ ] =>
 
 }

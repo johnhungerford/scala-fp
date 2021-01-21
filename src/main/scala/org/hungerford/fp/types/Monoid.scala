@@ -1,6 +1,5 @@
 package org.hungerford.fp.types
 
-import hungerford.fp.collections.FpNil
 import org.hungerford.fp.collections.{FpList, FpNil}
 
 trait MonoidStatic[ T ] {
