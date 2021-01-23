@@ -1,20 +1,22 @@
 package org.hungerford.fp.basic
 
 import org.hungerford.fp.collections.FpList
-import org.hungerford.fp.types.MonadCovariant
+import org.hungerford.fp.types.{MonadCovariant, MonadStatic}
 
 sealed trait FpTry[ +T ] extends MonadCovariant[ FpTry, T ] {
     override def flatMap[ A, B ]( a : FpTry[ A ] )
-                                ( fn : A => FpTry[ B ] ) : FpTry[ B ] = a match {
-        case FpSuccess( v ) => fn( v )
-        case FpFailure( v ) => FpFailure( v )
-    }
+                                ( fn : A => FpTry[ B ] ) : FpTry[ B ] = FpTry.flatMap( a )( fn )
 
-    override def unit[ A ]( ele : A ) : FpTry[ A ] = FpSuccess( ele )
+    override def unit[ A ]( ele : A ) : FpTry[ A ] = FpTry.unit( ele )
 
     def toOption[ B >: T ] : FpOption[ B ] = this match {
         case FpSuccess( b ) => FpSome( b )
         case _ => FpNone
+    }
+
+    def toTry[ B >: T ] : FpEither[ B, Throwable ] = this match {
+        case FpSuccess( b ) => FpLeft[ B, Throwable ]( b )
+        case FpFailure( t ) => FpRight[ B, Throwable ]( t )
     }
 
     def getOrElse[ B >: T ]( alternative : B ) : B = this.toOption.getOrElse( alternative )
@@ -54,9 +56,14 @@ sealed trait FpTry[ +T ] extends MonadCovariant[ FpTry, T ] {
 
 case class FpSuccess[ +T ]( value : T ) extends FpTry[ T ]
 
-case class FpFailure( throwable : Throwable ) extends FpTry[ Nothing ]
+case class FpFailure( throwable : Throwable ) extends FpTry[ Nothing ] {
+    override def equals( obj : Any ) : Boolean = obj match {
+        case FpFailure( _ ) => true
+        case _ => false
+    }
+}
 
-object FpTry {
+object FpTry extends MonadStatic[ FpTry ] {
     def apply[ T ]( block : => T ) : FpTry[ T ] = try {
         FpSuccess( block )
     } catch {
@@ -80,4 +87,12 @@ object FpTry {
     def T[ M[ _ ], X ]( valueIn : MonadCovariant[ M, FpTry[ X ] ] ) : FpTryT[ M, X ] = new FpTryT[ M, X ] {
         override val value : MonadCovariant[ M, FpTry[ X ] ] = valueIn
     }
+
+    override def flatMap[ A, B ]( a : FpTry[ A ] )
+                                ( fn : A => FpTry[ B ] ) : FpTry[ B ] = a match {
+        case FpSuccess( v ) => fn( v )
+        case FpFailure( v ) => FpFailure( v )
+    }
+
+    override def unit[ A ]( ele : A ) : FpTry[ A ] = FpSuccess( ele )
 }

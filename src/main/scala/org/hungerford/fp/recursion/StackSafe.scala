@@ -1,6 +1,6 @@
 package org.hungerford.fp.recursion
 
-import org.hungerford.fp.types.Monad
+import org.hungerford.fp.types.{Monad, MonadCovariant, MonadStatic}
 
 import scala.annotation.tailrec
 
@@ -11,13 +11,18 @@ import scala.annotation.tailrec
  *
  * @tparam T The result type of the recursive function
  */
-sealed trait StackSafe[ T ] extends Monad[ StackSafe, T ] {
+sealed trait StackSafe[ +T ] extends MonadCovariant[ StackSafe, T ] {
 
-    override def flatMap[ A, B ]( a : StackSafe[ A ] )( fn : A => StackSafe[ B ] ) : StackSafe[ B ] = FlatMap( a, fn )
+    override def flatMap[ A, B ]( a : StackSafe[ A ] )( fn : A => StackSafe[ B ] ) : StackSafe[ B ] = StackSafe.flatMap( a )( fn )
 
-    override def unit[ A ]( ele : A ) : StackSafe[ A ] = Result( ele )
+    override def unit[ A ]( ele : A ) : StackSafe[ A ] = StackSafe.unit( ele )
 
-    def run : T = StackSafe.run( this )
+    def run() : T = StackSafe.run( this )
+
+    override def equals( obj : Any ) : Boolean = obj match {
+        case sf : StackSafe[ _ ] => sf.run == this.run
+        case _ => false
+    }
 }
 
 final case class Result[ T ]( value : T ) extends StackSafe[ T ]
@@ -30,7 +35,7 @@ object Call {
 
 final case class FlatMap[ S, T ]( sf : StackSafe[ S ], f : S => StackSafe[ T ] ) extends StackSafe[ T ]
 
-object StackSafe {
+object StackSafe extends MonadStatic[ StackSafe ] {
     /**
      *  Pass a block that evaluates to a StackSafe case -- either a Result, a Call,
      *  or a FlatMap -- to StackSafe and it will be evaluated without blowing the stack
@@ -39,10 +44,10 @@ object StackSafe {
      * @tparam T
      * @return
      */
-    def apply[ T ]( block : => StackSafe[ T ] ) : T = Call( () => block ).run
+    def apply[ T ]( block : => StackSafe[ T ] ) : T = Call( () => block ).run()
 
     @tailrec
-    def run[ A ]( sf : StackSafe[A] ): A = sf match {
+    def run[ A ]( sf : StackSafe[A] ) : A = sf match {
         case Result( a ) => a
         case Call( r ) => run( r() )
         case FlatMap( x : StackSafe[ Any ], f : (Any => StackSafe[ A ] ) ) => x match {
@@ -113,4 +118,8 @@ object StackSafe {
     def selfCall6[ A, B, C, D, E, F, Z ]( fn : ( (A, B, C, D, E, F) => StackSafe[ Z ] ) => ( (A, B, C, D, E, F) => StackSafe[ Z ] ) ) : (A, B, C, D, E, F) => Z =
         ( a : A, b : B, c : C, d : D, e : E, f : F ) => StackSafe( Y6( fn )( a, b, c, d, e, f ) )
 
+    override def flatMap[ A, B ]( a : StackSafe[ A ] )
+                                ( fn : A => StackSafe[ B ] ) : StackSafe[ B ] = FlatMap( a, fn )
+
+    override def unit[ A ]( ele : A ) : StackSafe[ A ] = Result( ele )
 }

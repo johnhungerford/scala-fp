@@ -2,21 +2,21 @@ package org.hungerford.fp.impure
 
 import org.hungerford.fp.basic.{FpSuccess, FpTry}
 import org.hungerford.fp.recursion.{Call, Result, StackSafe}
-import org.hungerford.fp.types.{Monad, Monoid}
+import org.hungerford.fp.types.{Monad, MonadCovariant, MonadStatic, Monoid, MonoidStatic}
 
-import scala.annotation.tailrec
+import scala.concurrent.ExecutionContext
 
 // An effects type
-trait FpImpure[ T ] extends Monad[ FpImpure, T ] with Monoid[ FpImpure[ _ ] ] {
+sealed trait FpImpure[ +T ] extends MonadCovariant[ FpImpure, T ] with Monoid[ FpImpure[ _ ] ] {
     def run : () => FpTry[ T ]
 
-    override def flatMap[ A, B ]( a : FpImpure[ A ] )( fn : A => FpImpure[ B ] ) : FpImpure[ B ] = FpImpure.fromTry ( a.run().flatMap( ( res : A ) => fn( res ).run() ) )
+    override def flatMap[ A, B ]( a : FpImpure[ A ] )( fn : A => FpImpure[ B ] ) : FpImpure[ B ] = FpImpure.flatMap( a )( fn )
 
-    override def unit[ A ]( ele : A ) : FpImpure[ A ] = FpImpure ( ele )
+    override def unit[ A ]( ele : A ) : FpImpure[ A ] = FpImpure.unit( ele )
 
-    override def empty : FpImpure[ Unit ] = FpImpure( () => () )
+    override def empty : FpImpure[ Unit ] = FpImpure.empty
 
-    override def combine[ B ]( a : FpImpure[ _ ], b : FpImpure[ _ ] ) : FpImpure[ _ ] = a >> b
+    override def combine[ B ]( a : FpImpure[ _ ], b : FpImpure[ _ ] ) : FpImpure[ _ ] = FpImpure.combine( a, b )
 
     def >>[ U ]( fpImpure : FpImpure[ U ] ) : FpImpure[ U ] = this.flatMap( _ => fpImpure )
 
@@ -24,9 +24,11 @@ trait FpImpure[ T ] extends Monad[ FpImpure, T ] with Monoid[ FpImpure[ _ ] ] {
 
     def loop : FpImpure[ Unit ] = FpImpure.loop( this )
 
-    private val doWhileStatic : (FpImpure[ T ], T => Boolean) => FpImpure[ T ] = StackSafe.selfCall2[ FpImpure[ T ], T => Boolean, FpImpure[ T ] ] {
+    def async[ B >: T ]( implicit ec : ExecutionContext ) : FpImpureFuture[ B ] = FpImpureFuture.fromImpure( this )
+
+    private def doWhileStatic[ B >: T ] : (FpImpure[ B ], B => Boolean) => FpImpure[ B ] = StackSafe.selfCall2[ FpImpure[ B ], B => Boolean, FpImpure[ B ] ] {
         thisFn =>
-            ( ele : FpImpure[ T ], cnd : T => Boolean ) =>
+            ( ele : FpImpure[ B ], cnd : B => Boolean ) =>
                 ele.run() match {
                     case FpSuccess( res ) if ( !cnd( res ) ) => Result( FpImpure( res ) )
                     case _ =>
@@ -37,9 +39,14 @@ trait FpImpure[ T ] extends Monad[ FpImpure, T ] with Monoid[ FpImpure[ _ ] ] {
     }
 
     final def doWhile( condition : T => Boolean ) : FpImpure[ T ] = FpImpure.fromTry { doWhileStatic( this, condition ).run() }
+
+    override def equals( obj : Any ) : Boolean = obj match {
+        case fpi : FpImpure[ _ ] => fpi.run() == this.run()
+        case _ => false
+    }
 }
 
-object FpImpure {
+object FpImpure extends MonadStatic[ FpImpure ] with MonoidStatic[ FpImpure[ _ ] ] {
     def fromTry[ A ]( block : => FpTry[ A ] ) : FpImpure[ A ] = new FpImpure[A] {
         override def run : ( ) => FpTry[ A ] = () => block
     }
@@ -68,4 +75,13 @@ object FpImpure {
                 }
             }
     }( impure ) )
+
+    override def flatMap[ A, B ]( a : FpImpure[ A ] )
+                                ( fn : A => FpImpure[ B ] ) : FpImpure[ B ] = FpImpure.fromTry ( a.run().flatMap( ( res : A ) => fn( res ).run() ) )
+
+    override def empty : FpImpure[ Unit ] = FpImpure[ Unit ]( () => () )
+
+    override def combine[ B ]( a : FpImpure[ _ ], b : FpImpure[ _ ] ) : FpImpure[ _ ] = a >> b
+
+    override def unit[ A ]( ele : A ) : FpImpure[ A ] = FpImpure ( ele )
 }

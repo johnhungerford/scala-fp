@@ -1,9 +1,8 @@
 package org.hungerford.fp.collections
 
 import org.hungerford.fp.basic.{FpNone, FpOption, FpSome}
-import org.hungerford.fp.collections.FpList.FpListT
 import org.hungerford.fp.recursion.{Call, Result, StackSafe}
-import org.hungerford.fp.types.{Monad, MonadCovariant, MonadStatic, MonoidCovariant, MonoidCovariantStatic, Transformer}
+import org.hungerford.fp.types.{Monad, MonadCovariant, MonadStatic, MonoidCovariant, MonoidCovariantStatic}
 
 import scala.annotation.tailrec
 
@@ -103,6 +102,20 @@ object FpList extends MonadStatic[ FpList ] with MonoidCovariantStatic[ FpList ]
         override def tail : FpList[ T ] = tailIn
 
         override def head : T = headIn
+
+        override def equals( obj : Any ) : Boolean = obj match {
+            case FpNil => false
+            case FpList( FpNil, v2 ) => this match {
+                case FpList( FpNil, v1 ) => v1 == v2
+                case _ => false
+            }
+            case FpList( list2, v2 ) => this match {
+                case FpList( FpNil, _ ) => false
+                case FpList( list1, v1 ) => v1 == v2 && list1 == list2
+                case _ => false
+            }
+            case _ => false
+        }
     }
 
     def apply[ T ]( list : List[ T ] ) : FpList[ T ] = convertList( list ).reverse
