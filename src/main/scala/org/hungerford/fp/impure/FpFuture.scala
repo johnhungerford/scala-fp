@@ -3,12 +3,13 @@ package org.hungerford.fp.impure
 import org.hungerford.fp.basic.{FpFailure, FpNone, FpOption, FpSome, FpSuccess, FpTry}
 import org.hungerford.fp.types.{MonadCovariant, MonadStatic}
 
-import scala.concurrent.{ExecutionContext, TimeoutException}
+import scala.annotation.tailrec
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future, TimeoutException}
 
 case class Timeout( ms : Long )
 
 sealed trait FpFuture[ +T ] extends MonadCovariant[ FpFuture, T ] {
-    val io : FpImpure[ T ]
     val ec : ExecutionContext
 
     private final val outerThis = this
@@ -35,7 +36,7 @@ sealed trait FpFuture[ +T ] extends MonadCovariant[ FpFuture, T ] {
     }
 }
 
-sealed class FpFutureIncomplete[ T ]( override val io : FpImpure[ T ] )( implicit ecIn : ExecutionContext ) extends FpFuture[ T ] {
+sealed class FpFutureIncomplete[ T ]( io : FpImpure[ T ] )( implicit ecIn : ExecutionContext ) extends FpFuture[ T ] {
     override val ec = ecIn
 
     private val outerThis = this
@@ -90,7 +91,6 @@ sealed class FpFutureIncomplete[ T ]( override val io : FpImpure[ T ] )( implici
 }
 
 sealed class FpFutureComplete[ T ]( res : FpTry[ T ] ) extends FpFuture[ T ] {
-    override val io : FpImpure[ T ] = FpImpure.fromTry( res )
     override val ec : ExecutionContext = new ExecutionContext {
         override def execute( runnable : Runnable ) : Unit = ()
         override def reportFailure( cause : Throwable ) : Unit = ()
@@ -111,6 +111,23 @@ object FpFuture extends MonadStatic[ FpFuture ] {
     def fromTry[ T ]( block : FpTry[ T ] )( implicit ec : ExecutionContext ) : FpFuture[ T ] = block match {
         case FpFailure( t ) => failed( t )
         case FpSuccess( v ) => successful( v )
+    }
+
+    def fromFuture[ T ]( scalaFuture : Future[ T ] )( implicit ec : ExecutionContext ) : FpFuture[ T ] = {
+        val io : FpImpure[ T ] = FpImpure.fromTry {
+            @tailrec
+            def tryRes : FpTry[ T ] = {
+                val tr = FpTry( Await.result( scalaFuture, Duration( 1, scala.concurrent.duration.HOURS ) ) )
+                tr match {
+                    case FpFailure( _ : TimeoutException ) => tryRes
+                    case r@FpSuccess( _ ) => r
+                }
+            }
+
+            tryRes
+        }
+
+        new FpFutureIncomplete[T]( io )
     }
 
     def successful[ T ]( res : T ) : FpFuture[ T ] = new FpFutureComplete[T]( FpSuccess( res ) )
