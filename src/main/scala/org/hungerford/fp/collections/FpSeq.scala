@@ -4,9 +4,15 @@ import org.hungerford.fp.basic.FpOption
 
 trait FpSeq[ +T ] {
 
+    def apply[ B >: T ]( index : Int ) : FpOption[ B ]
+
     def toFpList : FpList[ T ]
 
+    def toList : List[ T ] = toFpList.toList
+
     def headOption : FpOption[ T ]
+
+    def tailOption : FpOption[ FpSeq[ T ] ]
 
     def +[ B >: T ]( ele : B ) : FpSeq[ B ]
     def append[ B >: T ]( ele : B ) : FpSeq[ B ]
@@ -29,11 +35,11 @@ trait FpSeq[ +T ] {
 
     def takeWhile( fn : T => Boolean ) : FpSeq[ T ]
 
+    def drop( num : Int ) : FpSeq[ T ]
+
     def dropWhileEnd( fn : T => Boolean ) : FpSeq[ T ]
 
     def dropWhile( fn : T => Boolean ) : FpSeq[ T ]
-
-    def toList : List[ T ]
 
     def exists( fn : T => Boolean ) : Boolean
 
@@ -51,6 +57,11 @@ trait FpSeq[ +T ] {
 
     def sortWith[ B >: T ]( cmp : (B, B) => Int )  : FpSeq[ B ]
 
-    def reduce[ B >: T ]( fn : (B, B) => B ) : B
+    def zipWith[ B >: T, C ]( that : FpSeq[ C ] ) : FpSeq[ (B, C) ]
 
+    def zipWithIndex[ B >: T ] : FpSeq[ (B, Int) ]
+
+    def withLeft[ B >: T ]( start : B )( fn : (B, B) => B ) : FpSeq[ B ]
+
+    def withRight[ B >: T ]( end : B )( fn : (B, B) => B ) : FpSeq[ B ]
 }

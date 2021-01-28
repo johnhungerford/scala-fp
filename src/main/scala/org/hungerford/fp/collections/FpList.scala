@@ -8,9 +8,21 @@ import scala.annotation.tailrec
 
 sealed trait FpList[ +T ] extends FpSeq[ T ] with MonadCovariant[ FpList, T ] with MonoidCovariant[ FpList, T ] {
 
+    override def apply[ B >: T ]( index : Int ) : FpOption[ B ] = StackSafe.selfCall2 [Int, FpList[ B ], FpOption[ B ] ] {
+        thisFn =>
+            (i, l) => if ( i < 0 ) Result( FpNone ) else l match {
+                case FpNil => Result( FpNone )
+                case FpLs( next, v ) => if ( i == 0 ) Result( FpSome( v ) ) else Call.from {
+                    thisFn( i - 1, next )
+                }
+            }
+    }( index, this )
+
     override def toFpList : FpList[ T ] = this
 
     def headOption : FpOption[ T ] = FpList.headOption( this )
+
+    def tailOption : FpOption[ FpList[ T ] ] = FpList.tailOption( this )
 
     def +[ B >: T ]( ele : B ) : FpList[ B ] = FpList.append[ T, B ]( this, ele )
     def append[ B >: T ]( ele : B ) : FpList[ B ] = FpList.append[ T, B ]( this, ele )
@@ -43,11 +55,13 @@ sealed trait FpList[ +T ] extends FpSeq[ T ] with MonadCovariant[ FpList, T ] wi
 
     def takeWhile( fn : T => Boolean ) : FpList[ T ] = FpList.takeWhile( this )( fn )
 
+    def drop( num : Int ) : FpList[ T ] = ???
+
     def dropWhileEnd( fn : T => Boolean ) : FpList[ T ] = FpList.dropWhileEnd( this )( fn )
 
     def dropWhile( fn : T => Boolean ) : FpList[ T ] = FpList.dropWhile( this )( fn )
 
-    def toList : List[ T ] = FpList.toList( this )
+    override def toList : List[ T ] = FpList.toList( this )
 
     def exists( fn : T => Boolean ) : Boolean = FpList.exists( this )( fn )
 
@@ -65,7 +79,19 @@ sealed trait FpList[ +T ] extends FpSeq[ T ] with MonadCovariant[ FpList, T ] wi
 
     def sortWith[ B >: T ]( cmp : (B, B) => Int )  : FpList[ B ] = FpList.sortWith[ T, B ]( this )( cmp )
 
-    def reduce[ B >: T ]( fn : (B, B) => B ) : B = FpList.reduce[ B ]( this )( fn )
+    override def zipWith[ B >: T, C ]( that : FpSeq[ C ] ) : FpSeq[ (B, C) ] = ???
+
+    override def zipWithIndex[ B >: T ] : FpSeq[ (B, Int) ] = ???
+
+    override def withLeft[ B >: T ]( start : B )( fn : (B, B) => B ) : FpSeq[ B ] = ???
+
+    override def withRight[ B >: T ]( end : B )( fn : (B, B) => B ) : FpSeq[ B ] = ???
+
+    def reduce[ B >: T ]( fn : (B, B) => B ) : FpOption[ B ] = FpList.reduce[ B ]( this )( fn )
+
+    def foldLeft[ A, B >: T ]( aggregate : A )( fn : (A, B) => A ) : A = FpList.foldLeft( this )( aggregate )( fn )
+
+    def foldRight[ A, B >: T ]( aggregate : A )( fn : (A, B) => A ) : A = FpList.foldRight( this )( aggregate )( fn )
 
     final def lenEq( num : Int ) : Boolean = FpList.lenEq( this )( num )
 
@@ -93,7 +119,7 @@ object FpList extends MonadStatic[ FpList ] with MonoidCovariantStatic[ FpList ]
 
     def unapply[ T ]( fpList : FpList[ T ] ) : Option[ (FpList[ T ], T) ] = fpList match {
         case FpNil => None
-        case FpLs( tail : FpList[ T ], head : T ) => Some( (tail, head) )
+        case FpLs( tail, head ) => Some( (tail, head) )
     }
 
     def gen[ A ]( num : Int )( ele : A ) : FpList[ A ] = StackSafe.selfCall[ Int, FpList[ A ] ] {
@@ -142,6 +168,11 @@ object FpList extends MonadStatic[ FpList ] with MonoidCovariantStatic[ FpList ]
     def headOption[ T ]( l : FpList[ T ] ) : FpOption[ T ] = l match {
         case FpNil => FpNone
         case FpLs( _, head ) => FpSome( head )
+    }
+
+    def tailOption[ T ]( l : FpList[ T ] ) : FpOption[ FpList[ T ] ] = l match {
+        case FpNil => FpNone
+        case FpLs( tail, _ ) => FpSome( tail )
     }
 
     @tailrec
@@ -308,8 +339,7 @@ object FpList extends MonadStatic[ FpList ] with MonoidCovariantStatic[ FpList ]
     @tailrec
     final def contains[ A, B >: A ]( list : FpList[ A ] )( ele : B ) : Boolean = list match {
         case FpNil => false
-        case FpLs( _, ele ) => true
-        case FpLs( next, _ ) => contains[ B, B ]( next )( ele )
+        case FpLs( next, head ) => if ( head == ele ) true else contains[ B, B ]( next )( ele )
     }
 
     private def makeDistinct[ A ]( list : FpList[ A ] ) : FpList[ A ] = StackSafe {
@@ -372,10 +402,13 @@ object FpList extends MonadStatic[ FpList ] with MonoidCovariantStatic[ FpList ]
         } )
     }
 
-    def reduce[ T ]( list : FpList[ T ] )( fn : (T, T) => T ) : T = list match {
-        case FpNil => throw new IllegalArgumentException( "Unable to reduce empty list" )
-        case FpLs( FpNil, head ) => head
-        case FpLs( newList, head ) => fn( head, reduce( newList )( fn ) )
+    def reduce[ T ]( list : FpList[ T ] )( fn : (T, T) => T ) : FpOption[ T ] = list match {
+        case FpNil => FpNone
+        case FpLs( FpNil, head ) => FpSome( head )
+        case FpLs( newList, head ) => reduce( newList )( fn ) match {
+            case FpNone => FpSome( head )
+            case FpSome( res ) => FpSome( fn( head, res ) )
+        }
     }
 
     @tailrec
@@ -423,6 +456,19 @@ object FpList extends MonadStatic[ FpList ] with MonoidCovariantStatic[ FpList ]
         case _ => false
     }
 
+    def foldLeft[ A, T ]( list : FpList[ T ] )( aggregate : A )( fn : (A, T) => A ) : A = StackSafe.selfCall2[ A, FpList[ T ], A ] {
+        ( thisFn : (A, FpList[ T ]) => StackSafe[ A ] ) =>
+            ( agg : A, l : FpList[ T ] ) => l match {
+                case FpNil => Result( agg )
+                case FpLs( FpNil, res ) => Result( fn( agg, res ) )
+                case FpLs( nextL, res ) => Call.from {
+                    thisFn( fn( agg, res ), nextL )
+                }
+            }
+    }( aggregate, list )
+
+    def foldRight[ A, T ]( list : FpList[ T ] )( aggregate : A )( fn : (A, T) => A ) : A = foldLeft( list.reverse )( aggregate )( fn )
+
     sealed trait FpListT[ M[ _ ], +T ] extends MonadCovariant[ ({ type A[ B ] = FpListT[ M, B ]})#A, T ] {
         val value : MonadCovariant[ M, FpList[ T ] ]
 
@@ -435,7 +481,7 @@ object FpList extends MonadStatic[ FpList ] with MonoidCovariantStatic[ FpList ]
                                     ( fn : A => FpListT[ M, B ] ) : FpListT[ M, B ] = {
             FpList.T[ M, B ]( a.value.flatMap { l : FpList[ A ] => l match {
                 case FpNil => a.value.unit( FpNil ).asInstanceOf[ M[ FpList[ B ] ] ]
-                case list : FpList[ A ] => list.map( fn ).reduce( _ ++ _ ).value.asInstanceOf[ M[ FpList[ B ] ] ]
+                case list : FpList[ A ] => list.map( fn ).foldLeft[ FpListT[ M, B ], FpListT[ M, B ] ]( T[ M, B ]( value.unit[ FpList[ B ] ]( FpNil ).asInstanceOf[ MonadCovariant[ M, FpList[ B ] ] ] ) )( _ ++ _ ).value.asInstanceOf[ M[ FpList[ B ] ] ]
             } }.asInstanceOf[ MonadCovariant[ M, FpList[ B ] ] ])
         }
 
