@@ -1,12 +1,11 @@
 package org.hungerford.fp.basic
 
-import org.hungerford.fp.types.{MonadCovariant, MonadStatic}
+import org.hungerford.fp.types.{Monad, MonadStatic, WithTransformer}
 
-sealed trait FpEither[ +T, U ] extends MonadCovariant[ ({ type X[ Y ] = FpEither[ Y, U ] })#X, T ] {
-    override def flatMap[ A, B ]( a : FpEither[ A, U ] )
-                                ( fn : A => FpEither[ B, U ] ) : FpEither[ B, U ] = FpEitherStatic[ U ].flatMap[ A, B ]( a )( fn )
-
-    override def unit[ A ]( ele : A ) : FpEither[ A, U ] = FpEitherStatic[ U ].unit( ele )
+sealed trait FpEither[ +T, U ] extends Monad[ ({ type X[ +Y ] = FpEither[ Y, U ] })#X, T ] {
+    override val static : MonadStatic[ ( {
+        type X[ +Y ] = FpEither[ Y, U ]
+    } )#X ] = FpEitherStatic[ U ]()
 
     def toOption[ B >: T ] : FpOption[ B ] = this match {
         case FpLeft( b ) => FpSome( b )
@@ -25,7 +24,10 @@ case class FpLeft[ +T, U ]( value : T ) extends FpEither[ T, U ]
 
 case class FpRight[ +T, U ]( value : U ) extends FpEither[ Nothing, U ]
 
-case class FpEitherStatic[ U ]() extends MonadStatic[ ({ type E[ A ] = FpEither[ A, U ]})#E ] {
+case class FpEitherStatic[ U ]()
+  extends MonadStatic[ ({ type E[ +A ] = FpEither[ A, U ]})#E ]
+    with WithTransformer[ ({ type E[ +A ] = FpEither[ A, U ]})#E ] {
+
     override def flatMap[ A, B ]( a : FpEither[ A, U ] )
                                 ( fn : A => FpEither[ B, U ] ) : FpEither[ B, U ] = a match {
         case FpLeft( v ) => fn( v )
@@ -34,22 +36,23 @@ case class FpEitherStatic[ U ]() extends MonadStatic[ ({ type E[ A ] = FpEither[
 
     override def unit[ A ]( ele : A ) : FpEither[ A, U ] = FpLeft[ A, U ]( ele )
 
-    sealed trait FpEitherT[ M[ _ ], +T ] extends MonadCovariant[ ({ type A[ B ] = FpEitherT[ M, B ]})#A, T ] {
-        val value : MonadCovariant[ M, FpEither[ T, U ] ]
+    private val outerThis = this
 
-        override def flatMap[ A, B ]( a : FpEitherT[ M, A ] )
-                                    ( fn : A => FpEitherT[ M, B ] ) : FpEitherT[ M, B ] = {
-            T[ M, B ]( a.value.flatMap { l : FpEither[ A, U ] => l match {
-                case FpRight( v ) => a.value.unit( FpRight( v ) ).asInstanceOf[ M[ FpEither[ B, U ] ] ]
-                case FpLeft( v ) => fn( v ).value.asInstanceOf[ M[ FpEither[ B, U ] ] ]
-            } }.asInstanceOf[ MonadCovariant[ M, FpEither[ B, U ] ] ])
+    private class ThisTransformerStatic[ M[ +_ ] <: Monad[ M, _ ] ]( staticIn : MonadStatic[ M ] ) extends super.TransformerStatic[ M ] {
+        override val outerStatic : MonadStatic[ M ] = outerStatic
+        override val innerStatic : MonadStatic[ ( { type E[ +A ] = FpEither[ A, U ] } )#E ] = outerThis
+
+        override def flatMap[ A, B ]( a : Transformer[ M, A ] )
+                                    ( fn : A => Transformer[ M, B ] ) : Transformer[ M, B ] = {
+
+            T[ M, B ]( a.value.asInstanceOf[ Monad[ M, FpEither[ A, U ] ] ].flatMap {
+                case FpRight( v ) => outerStatic.unit( FpRight( v ) )
+                case FpLeft( v ) => fn( v ).value
+            } )
         }
-
-        override def unit[ A ]( ele : A ) : FpEitherT[ M, A ] = T( value.unit( FpLeft( ele ) ).asInstanceOf[ MonadCovariant[ M, FpEither[ A, U ] ] ] )
     }
 
-    def T[ M[ _ ], X ]( valueIn : MonadCovariant[ M, FpEither[ X, U ] ] ) : FpEitherT[ M, X ] = new FpEitherT[ M, X ] {
-        override val value : MonadCovariant[ M, FpEither[ X, U ] ] = valueIn
+    override protected def TS[ M[ +_ ] <: Monad[ M, _ ] ]( outerStatic : MonadStatic[ M ] ) : TransformerStatic[ M ] = {
+        new ThisTransformerStatic[ M ]( outerStatic )
     }
-
 }

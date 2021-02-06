@@ -3,9 +3,11 @@ package org.hungerford.fp.impure
 import org.hungerford.fp.basic.{FpFailure, FpNone, FpOption, FpSome, FpSuccess, FpTry}
 import org.hungerford.fp.collections.{FpList, FpNil, FpSeq, FpString}
 import org.hungerford.fp.recursion.{Call, Result, StackSafe}
-import org.hungerford.fp.types.{MonadCovariant, MonadStatic}
+import org.hungerford.fp.types.{Monad, MonadStatic}
 
-sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with MonadCovariant[ FpImpureList, T ] {
+sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with Monad[ FpImpureList, T ] {
+    override val static : MonadStatic[ FpImpureList ] = FpImpureList
+
     private[ impure ] val impure : FpImpure[ FpImpureEvaluatedList[ T ] ]
 
     override def apply[ B >: T ]( index : Int ) : FpOption[ B ] = ???
@@ -26,8 +28,8 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with MonadCovariant[ FpImpure
                         case FpFailure( _ ) => Result( FpImpureNil )
                     }
                     case FpImpureNil => Result( FpImpureNil )
-                    case FpImpureListEval( next, v ) => Call.from {
-                        thisFn( i - 1, next ).map( ll => FpImpureListEval( ll, v ) )
+                    case FpImpureListEval( v, next ) => Call.from {
+                        thisFn( i - 1, next ).map( ll => FpImpureListEval( v, ll ) )
                     }
                 }
     }( num, this )
@@ -39,16 +41,16 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with MonadCovariant[ FpImpure
                 case FpFailure( _ ) => Result( FpImpureNil )
             }
             case FpImpureNil => Result( FpImpureNil )
-            case FpImpureListEval( next, v ) => Call.from {
-                thisFn( next ).map( ll => FpImpureListEval( ll, v ) )
+            case FpImpureListEval( v, next ) => Call.from {
+                thisFn( next ).map( ll => FpImpureListEval( v, ll ) )
             }
         }
     }( this )
 
     final def withTry : FpImpureList[ FpTry[ T ] ] = this match {
         case FpImpureNil => FpImpureNil
-        case FpImpureListEval( next, v ) => FpImpureList {
-            FpImpureListEval( next.withTry, FpSuccess( v ) )
+        case FpImpureListEval( v, next ) => FpImpureList {
+            FpImpureListEval( FpSuccess( v ), next.withTry )
         }
         case FpImpureUnevaluatedList( imp ) => FpImpureList {
             imp.run() match {
@@ -58,12 +60,11 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with MonadCovariant[ FpImpure
         }
     }
 
-
     override def toFpList : FpList[ T ] = StackSafe.selfCall[ FpImpureList[ T ], FpList[ T ] ] {
         thisFn => {
             case FpImpureNil => Result( FpNil )
-            case FpImpureListEval( next, head ) => Call.from {
-                thisFn( next ).map( l => l + head )
+            case FpImpureListEval( head, next ) => Call.from {
+                thisFn( next ).map( l => head +: l )
             }
             case FpImpureUnevaluatedList( imp ) => Call.from {
                 thisFn( imp.run().getOrElse( FpImpureNil ) )
@@ -71,13 +72,15 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with MonadCovariant[ FpImpure
         }
     }( this )
 
-    override def +[ B >: T ]( that : B ) : FpImpureList[ B ] = FpImpureList.combine( this, that )
+    override def :+[ B >: T ]( that : B ) : FpImpureList[ B ] = FpImpureList.combine( this, FpImpureList.of( that ) )
+    override def +:[ B >: T ]( that : B ) : FpImpureList[ B ] = FpImpureList.combine( this, that )
 
-    override def ++[ B >: T ]( that : FpSeq[ B ] ) : FpImpureList[ B ] = FpImpureList.combine( this, FpImpureList.fromFpList( that.toFpList ) )
+    override def :++[ B >: T ]( that : FpSeq[ B ] ) : FpImpureList[ B ] = FpImpureList.combine( this, FpImpureList.fromFpList( that.toFpList ) )
+    override def ++:[ B >: T ]( that : FpSeq[ B ] ) : FpImpureList[ B ] = FpImpureList.combine( this, FpImpureList.fromFpList( that.toFpList ) )
 
     override def headOption : FpOption[ T ] = this match {
         case FpImpureNil => FpNone
-        case FpImpureListEval( _, head ) => FpSome( head )
+        case FpImpureListEval( head, _ ) => FpSome( head )
         case FpImpureUnevaluatedList( impure ) => impure.run() match {
             case FpSuccess( next ) => next.headOption
             case FpFailure( _ ) => FpNone
@@ -86,16 +89,12 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with MonadCovariant[ FpImpure
 
     override def tailOption : FpOption[ FpImpureList[ T ] ] = this match {
         case FpImpureNil => FpNone
-        case FpImpureListEval( tail, _ ) => FpSome( tail )
+        case FpImpureListEval( _, tail ) => FpSome( tail )
         case FpImpureUnevaluatedList( impure ) => impure.run() match {
             case FpSuccess( next ) => next.tailOption
             case FpFailure( _ ) => FpNone
         }
     }
-
-    override def append[ B >: T ]( that : B ) : FpImpureList[ B ] = FpImpureList.combine( this, that )
-
-    override def fpString : FpString = ???
 
     override def reverse : FpImpureList[ T ] = StackSafe.selfCall[ FpImpureList[ T ], FpImpureList[ T ] ] {
         ( thisFn : FpImpureList[ T ] => StackSafe[ FpImpureList[ T ] ] ) => {
@@ -103,13 +102,13 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with MonadCovariant[ FpImpure
             case uneval@FpImpureUnevaluatedList( _ ) => Result( FpImpureUnevaluatedList {
                 FpImpure( uneval.evaluate().reverse.evaluate() )
             } )
-            case FpImpureListEval( next, v ) => Call.from {
-                thisFn( next ).map( ll => ll ++ FpImpureListEval( FpImpureNil, v ) )
+            case FpImpureListEval( v, next ) => Call.from {
+                thisFn( next ).map( ll => ll :++ FpImpureListEval( v, ll ) )
             }
         }
     }( this )
 
-    override def length : Int = ???
+    override def lengthOpt : FpOption[ Int ] = ???
 
     override def times( num : Int ) : FpImpureList[ T ] = ???
 
@@ -121,8 +120,8 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with MonadCovariant[ FpImpure
                 ( i, ll ) =>
                     if ( i < 1 ) Result( FpImpureNil ) else ll match {
                         case FpImpureNil => Result( FpImpureNil )
-                        case FpImpureListEval( tail, head ) => Call.from {
-                            thisFn( i - 1, tail ).map( ll => FpImpureList( FpImpureListEval( ll, head ) ) )
+                        case FpImpureListEval( head, tail ) => Call.from {
+                            thisFn( i - 1, tail ).map( ll => FpImpureList( FpImpureListEval( head, ll ) ) )
                         }
                         case uneval@FpImpureUnevaluatedList( _ ) => Result( FpImpureList( StackSafe( thisFn( i, uneval.evaluate() ) ) ) )
                     }
@@ -130,15 +129,13 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with MonadCovariant[ FpImpure
         if ( num < 0 ) res.reverse else res
     }
 
-    override def takeWhileEnd( fn : T => Boolean ) : FpImpureList[ T ] = ???
-
     override def takeWhile( fn : T => Boolean ) : FpImpureList[ T ] = ???
 
     override def drop( num : Int ) : FpImpureList[ T ] = ???
 
-    override def dropWhileEnd( fn : T => Boolean ) : FpImpureList[ T ] = ???
-
     override def dropWhile( fn : T => Boolean ) : FpImpureList[ T ] = ???
+
+    override def slice( start : Int, end : Int ) : FpImpureList[ T ] = drop( start ).take( end - start )
 
     override def exists( fn : T => Boolean ) : Boolean = ???
 
@@ -158,10 +155,10 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with MonadCovariant[ FpImpure
 
     override def zipWith[ B >: T, C ]( that : FpSeq[ C ] ) : FpImpureList[ (B, C) ] = this match {
         case FpImpureNil => FpImpureNil
-        case FpImpureListEval( nextLeftIl, vLeft ) => that match {
+        case FpImpureListEval( vLeft, nextLeftIl ) => that match {
             case FpImpureNil => FpImpureNil
-            case FpImpureListEval( nextRightIl, vRight ) => FpImpureList {
-                FpImpureListEval( nextLeftIl.zipWith( nextRightIl ), (vLeft, vRight) )
+            case FpImpureListEval( vRight, nextRightIl ) => FpImpureList {
+                FpImpureListEval( (vLeft, vRight), nextLeftIl.zipWith( nextRightIl ) )
             }
             case uneval@FpImpureUnevaluatedList( _ ) => FpImpureList( this.zipWith( uneval.evaluate() ) )
             case _ : FpSeq[ _ ] => this.zipWith( FpImpureList.fromFpList( that.toFpList ) )
@@ -182,7 +179,7 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with MonadCovariant[ FpImpure
             ( agg : A, il : FpImpureList[ B ] ) =>
                 il match {
                     case FpImpureNil => Result( FpImpure( agg ) )
-                    case FpImpureListEval( next, v ) => Call.from {
+                    case FpImpureListEval( v, next ) => Call.from {
                         thisFn( fn( agg, v ), next )
                     }
                     case FpImpureUnevaluatedList( imp ) => Result( StackSafe {
@@ -196,16 +193,11 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with MonadCovariant[ FpImpure
 
     def foldRight[ A, B >: T ]( aggregation : A )( fn : (A, B) => A ) : FpImpure[ A ] = this.reverse.foldLeft( aggregation )( fn )
 
-    override def flatMap[ A, B ]( a : FpImpureList[ A ] )
-                                ( fn : A => FpImpureList[ B ] ) : FpImpureList[ B ] = FpImpureList.flatMap( a )( fn )
-
-    override def unit[ A ]( ele : A ) : FpImpureList[ A ] = FpImpureList.unit( ele )
-
     private def toStringInternal[ A ]( ll : FpImpureList[ A ] ) : String = StackSafe.selfCall[ FpImpureList[ A ], String ] {
         thisFn => {
             case FpImpureNil => Result( "FpImpureNil" )
             case FpImpureUnevaluatedList( _ ) => Result( "??" )
-            case FpImpureListEval( tail, head ) => Call.from {
+            case FpImpureListEval( head, tail ) => Call.from {
                 thisFn( tail ).map( tailString => s"${head.toString} + ${tailString}" )
             }
         }
@@ -228,7 +220,7 @@ sealed trait FpImpureEvaluatedList[ +T ] extends FpImpureList[ T ] {
 
 case object FpImpureNil extends FpImpureEvaluatedList[ Nothing ]
 
-case class FpImpureListEval[ +T ]( tail : FpImpureList[ T ], head : T ) extends FpImpureEvaluatedList[ T ] {
+case class FpImpureListEval[ +T ]( head : T, tail : FpImpureList[ T ] ) extends FpImpureEvaluatedList[ T ] {
     override def equals( obj : Any ) : Boolean = obj match {
         case ll : FpImpureList[ _ ] => this.toList == ll.toList
         case _ => false
@@ -239,25 +231,25 @@ object FpImpureList extends MonadStatic[ FpImpureList ] {
 
     def apply[ T ]( il : => FpImpureList[ T ] ) : FpImpureList[ T ] = FpImpureUnevaluatedList( FpImpure( il.evaluate() ) )
 
-    def of[ T ]( v : =>T ) : FpImpureList[ T ] = apply( FpImpureListEval( FpImpureNil, v ) )
+    def of[ T ]( v : =>T ) : FpImpureList[ T ] = apply( FpImpureListEval( v, FpImpureNil ) )
 
     def fromFpList[ A ]( fpList : FpList[ A ] ) : FpImpureList[ A ] = StackSafe.selfCall[ FpList[ A ], FpImpureList[ A ] ] {
         thisFn => {
             case FpNil => Result( FpImpureNil )
             case FpList( tail, head ) => Call.from {
-                thisFn( tail ).map( ll => FpImpureList( FpImpureListEval( ll, head ) ) )
+                thisFn( tail ).map( ll => FpImpureList( FpImpureListEval( head, ll ) ) )
             }
         }
     }( fpList )
 
-    def combine[ A ]( a : FpImpureList[ A ], b : A ) : FpImpureList[ A ] = FpImpureList( FpImpureListEval( a, b ) )
+    def combine[ A ]( a : FpImpureList[ A ], b : A ) : FpImpureList[ A ] = FpImpureList( FpImpureListEval( b, a ) )
 
     def combine[ A ]( a : FpImpureList[ A ], b : FpImpureList[ A ] ) : FpImpureList[ A ] = {
         if ( a == FpImpureNil ) b else if ( b == FpImpureNil ) a else a match {
             case FpImpureNil => b
             case uneval@FpImpureUnevaluatedList( _ ) => FpImpureList( combine( uneval.evaluate(), b ) )
-            case FpImpureListEval( tail, head ) => FpImpureList {
-                FpImpureListEval( combine( tail, b ), head )
+            case FpImpureListEval( head, tail ) => FpImpureList {
+                FpImpureListEval( head, combine( tail, b ) )
             }
         }
     }
@@ -267,11 +259,11 @@ object FpImpureList extends MonadStatic[ FpImpureList ] {
                                 ( fn : A => FpImpureList[ B ] ) : FpImpureList[ B ] = a match {
         case FpImpureNil => FpImpureNil
         case uneval@FpImpureUnevaluatedList( imp ) => FpImpureList( flatMap( uneval.evaluate() )( fn ) )
-        case FpImpureListEval( tail : FpImpureList[ A ], head ) => FpImpureList {
+        case FpImpureListEval( head, tail : FpImpureList[ A ] ) => FpImpureList {
             fn( head ).evaluate() match {
                 case FpImpureNil => tail.flatMap( fn )
-                case FpImpureListEval( nextTail, nextHead ) =>
-                    FpImpureListEval( FpImpureList( nextTail ++ tail.flatMap( fn ) ), nextHead )
+                case FpImpureListEval( nextHead, nextTail ) =>
+                    FpImpureListEval( nextHead, FpImpureList( nextTail :++ tail.flatMap( fn ) ) )
             }
         }
     }

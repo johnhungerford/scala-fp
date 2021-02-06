@@ -1,7 +1,8 @@
 package org.hungerford.fp.impure
 
 import org.hungerford.fp.basic.{FpFailure, FpNone, FpOption, FpSome, FpSuccess, FpTry}
-import org.hungerford.fp.types.{MonadCovariant, MonadStatic}
+import org.hungerford.fp.impure
+import org.hungerford.fp.types.{Monad, MonadStatic, WithTransformer}
 
 import scala.annotation.tailrec
 import scala.concurrent.duration.Duration
@@ -9,10 +10,10 @@ import scala.concurrent.{Await, ExecutionContext, Future, TimeoutException}
 
 case class Timeout( ms : Long )
 
-sealed trait FpFuture[ +T ] extends MonadCovariant[ FpFuture, T ] {
+sealed trait FpFuture[ +T ] extends Monad[ FpFuture, T ] {
     val ec : ExecutionContext
 
-    private final val outerThis = this
+    override val static : MonadStatic[ FpFuture ] = FpFuture
 
     def isComplete : Boolean
 
@@ -21,11 +22,6 @@ sealed trait FpFuture[ +T ] extends MonadCovariant[ FpFuture, T ] {
     def await[ B >: T ] : FpTry[ B ]
 
     def impurify[ B >: T ] : FpImpureFuture[ B ] = FpImpureFuture( FpImpure( this ) )
-
-    override def flatMap[ A, B ]( a : FpFuture[ A ] )
-                                ( fn : A => FpFuture[ B ] ) : FpFuture[ B ] = FpFuture.flatMap( a )( fn )
-
-    override def unit[ A ]( ele : A ) : FpFuture[ A ] = FpFuture { ele }( ec )
 
     override def equals( obj : Any ) : Boolean = {
         obj match {
@@ -37,7 +33,7 @@ sealed trait FpFuture[ +T ] extends MonadCovariant[ FpFuture, T ] {
 }
 
 sealed class FpFutureIncomplete[ T ]( io : FpImpure[ T ] )( implicit ecIn : ExecutionContext ) extends FpFuture[ T ] {
-    override val ec = ecIn
+    override val ec : ExecutionContext = ecIn
 
     private val outerThis = this
 
@@ -103,7 +99,9 @@ sealed class FpFutureComplete[ T ]( res : FpTry[ T ] ) extends FpFuture[ T ] {
     override def await[ B >: T ] : FpTry[ B ] = res
 }
 
-object FpFuture extends MonadStatic[ FpFuture ] {
+object FpFuture
+  extends MonadStatic[ FpFuture ] {
+
     def apply[ T ]( block : => T )( implicit ec : ExecutionContext ) : FpFuture[ T ] = new FpFutureIncomplete[T]( FpImpure( block ) )
 
     def fromImpure[ T ]( block : FpImpure[ T ] )( implicit ec : ExecutionContext ) : FpFuture[ T ] = new FpFutureIncomplete[T]( block )
@@ -150,11 +148,8 @@ object FpFuture extends MonadStatic[ FpFuture ] {
 
 }
 
-case class FpImpureFuture[ +T ]( value : FpImpure[ FpFuture[ T ] ] ) extends MonadCovariant[ FpImpureFuture, T ] {
-    override def flatMap[ A, B ]( a : FpImpureFuture[ A ] )
-                                ( fn : A => FpImpureFuture[ B ] ) : FpImpureFuture[ B ] = FpImpureFuture.flatMap( a )( fn )
-
-    override def unit[ A ]( ele : A ) : FpImpureFuture[ A ] = FpImpureFuture.unit( ele )
+case class FpImpureFuture[ +T ]( value : FpImpure[ FpFuture[ T ] ] ) extends Monad[ FpImpureFuture, T ] {
+    override val static : MonadStatic[ FpImpureFuture ] = FpImpureFuture
 
     override def equals( obj : Any ) : Boolean = obj match {
         case FpImpureFuture( thatValue ) => this.value == thatValue

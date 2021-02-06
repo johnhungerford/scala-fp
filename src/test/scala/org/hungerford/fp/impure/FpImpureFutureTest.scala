@@ -1,10 +1,10 @@
 package org.hungerford.fp.impure
 
-import org.hungerford.fp.types.MonadCovariantTest
+import org.hungerford.fp.types.MonadTest
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
-class FpImpureFutureTest extends MonadCovariantTest(
+class FpImpureFutureTest extends MonadTest[ FpImpureFuture ](
     "FpImpureFuture",
     FpImpureFuture,
     List[ FpImpureFuture[ Int ] ](

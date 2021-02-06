@@ -1,8 +1,8 @@
 package org.hungerford.fp.basic
 
-import org.hungerford.fp.types.MonadCovariantTest
+import org.hungerford.fp.types.MonadTest
 
-class FpOptionTest extends MonadCovariantTest(
+class FpOptionTest extends MonadTest[ FpOption ](
     "FpOption",
     FpOption,
     List(

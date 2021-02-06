@@ -1,8 +1,8 @@
 package org.hungerford.fp.impure
 
-import org.hungerford.fp.types.MonadCovariantTest
+import org.hungerford.fp.types.MonadTest
 
-class FpImpureTest extends MonadCovariantTest(
+class FpImpureTest extends MonadTest[ FpImpure ](
     "FpImpure",
     FpImpure,
     List(
@@ -14,5 +14,7 @@ class FpImpureTest extends MonadCovariantTest(
         FpImpure { println( "another test " ); 0  }
     )
 ) {
+
+        import org.hungerford.fp.types.MonadTest
 
 }

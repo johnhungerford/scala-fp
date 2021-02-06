@@ -3,7 +3,7 @@ package org.hungerford.fp.types
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
-class FunctorCovariantTest[ T[ _ ] <: FunctorStatic[ T ] ]( className : String, staticFunctor : FunctorStatic[ T ] ) extends AnyFlatSpecLike with Matchers {
+class FunctorTest[ T[ +_ ] <: Functor[ T, _ ] ]( className : String, staticFunctor : FunctorStatic[ T ] ) extends AnyFlatSpecLike with Matchers {
     val afnList : List[ Int => Double ] = List[ Int => Double ](
         x => x.toDouble / 2,
         x => (3.32 + x) / 23,

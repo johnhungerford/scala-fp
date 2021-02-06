@@ -1,7 +1,7 @@
 package org.hungerford.fp.types
 
-class ApplicativeCovariantTest[ T[ _ ] <: ApplicativeStatic[ T ] ]( className : String, staticApplicative : ApplicativeStatic[ T ] )
-  extends FunctorCovariantTest[ T ]( className, staticApplicative ) {
+class ApplicativeTest[ T[ +_ ] <: Applicative[ T, _ ] ]( className : String, staticApplicative : ApplicativeStatic[ T ] )
+  extends FunctorTest[ T ]( className, staticApplicative ) {
 
     behavior of s"Applicative (covariant): ${className}"
 

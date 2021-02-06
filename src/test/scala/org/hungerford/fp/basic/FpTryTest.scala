@@ -1,9 +1,8 @@
 package org.hungerford.fp.basic
 
-import org.hungerford.fp.collections.FpList
-import org.hungerford.fp.types.MonadCovariantTest
+import org.hungerford.fp.types.MonadTest
 
-class FpTryTest extends MonadCovariantTest(
+class FpTryTest extends MonadTest[ FpTry ](
     "FpTry",
     FpTry,
     List(

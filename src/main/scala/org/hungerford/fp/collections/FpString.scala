@@ -5,11 +5,10 @@ import org.hungerford.fp.types.{Monoid, MonoidStatic}
 import scala.annotation.tailrec
 
 trait FpString extends Monoid[ FpString ] {
+
+  override val static : MonoidStatic[ FpString ] = FpString
+
   def toFpList : FpList[ Char ]
-
-  override def empty : FpString = FpString.empty
-
-  override def combine[ B ]( a : FpString, b : FpString ) : FpString = FpString.combine( a, b )
 
   override def toString : String = toFpList.toList.mkString
 
@@ -50,5 +49,5 @@ object FpString extends MonoidStatic[ FpString ] {
 
   override def empty : FpString = FpString( FpNil )
 
-  override def combine[ B ]( a : FpString, b : FpString ) : FpString = FpString( a.toFpList ++ b.toFpList )
+  override def combine[ B ]( a : FpString, b : FpString ) : FpString = FpString( a.toFpList :++ b.toFpList )
 }

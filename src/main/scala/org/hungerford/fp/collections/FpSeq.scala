@@ -3,7 +3,6 @@ package org.hungerford.fp.collections
 import org.hungerford.fp.basic.FpOption
 
 trait FpSeq[ +T ] {
-
     def apply[ B >: T ]( index : Int ) : FpOption[ B ]
 
     def toFpList : FpList[ T ]
@@ -14,16 +13,19 @@ trait FpSeq[ +T ] {
 
     def tailOption : FpOption[ FpSeq[ T ] ]
 
-    def +[ B >: T ]( ele : B ) : FpSeq[ B ]
-    def append[ B >: T ]( ele : B ) : FpSeq[ B ]
+    def +:[ B >: T ]( ele : B ) : FpSeq[ B ]
 
-    def ++[ B >: T ]( fpList : FpSeq[ B ] ) : FpSeq[ B ]
+    def :+[ B >: T ]( ele : B ) : FpSeq[ B ]
 
-    def fpString : FpString
+    def ++:[ B >: T ]( fpList : FpSeq[ B ] ) : FpSeq[ B ]
+
+    def :++[ B >: T ]( fpList : FpSeq[ B ] ) : FpSeq[ B ]
+
+    def fpString( sep : FpString ) : FpString = toFpList.fpString( sep )
 
     def reverse : FpSeq[ T ]
 
-    def length : Int
+    def lengthOpt : FpOption[ Int ]
 
     def times( num : Int ) : FpSeq[ T ]
 
@@ -31,19 +33,17 @@ trait FpSeq[ +T ] {
 
     def take( num : Int ) : FpSeq[ T ]
 
-    def takeWhileEnd( fn : T => Boolean ) : FpSeq[ T ]
-
     def takeWhile( fn : T => Boolean ) : FpSeq[ T ]
 
     def drop( num : Int ) : FpSeq[ T ]
 
-    def dropWhileEnd( fn : T => Boolean ) : FpSeq[ T ]
-
     def dropWhile( fn : T => Boolean ) : FpSeq[ T ]
+
+    def slice( start : Int, end : Int = -1 ) : FpSeq[ T ]
 
     def exists( fn : T => Boolean ) : Boolean
 
-    def contains[ B >: T ]( ele : B ) : Boolean
+    def contains[ B >: T ]( ele : B ) : Boolean = exists( _ == ele )
 
     def distinct : FpSeq[ T ]
 
@@ -53,9 +53,15 @@ trait FpSeq[ +T ] {
 
     def sort[ B >: T ]( implicit ord : Ordering[ B ] ) : FpSeq[ B ]
 
-    def sortBy[ B >: T, C ]( fn : B => C )( implicit ord : Ordering[ C ] ) : FpSeq[ B ]
+    def sortBy[ B >: T, C ]( fn : B => C )( implicit ord : Ordering[ C ] ) : FpSeq[ B ] = {
+        sort( Ordering.by( fn ) )
+    }
 
-    def sortWith[ B >: T ]( cmp : (B, B) => Int )  : FpSeq[ B ]
+    def sortWith[ B >: T ]( cmp : (B, B) => Int )  : FpSeq[ B ] = {
+        sort( new Ordering[ B ] {
+            override def compare( x : B, y : B ) : Int = cmp( x, y )
+        } )
+    }
 
     def zipWith[ B >: T, C ]( that : FpSeq[ C ] ) : FpSeq[ (B, C) ]
 

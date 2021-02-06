@@ -1,6 +1,7 @@
 package org.hungerford.fp.recursion
 
-import org.hungerford.fp.types.{Monad, MonadCovariant, MonadStatic}
+import org.hungerford.fp.recursion
+import org.hungerford.fp.types.{Monad, MonadStatic}
 
 import scala.annotation.tailrec
 
@@ -11,11 +12,9 @@ import scala.annotation.tailrec
  *
  * @tparam T The result type of the recursive function
  */
-sealed trait StackSafe[ +T ] extends MonadCovariant[ StackSafe, T ] {
+sealed trait StackSafe[ +T ] extends Monad[ StackSafe, T ] {
 
-    override def flatMap[ A, B ]( a : StackSafe[ A ] )( fn : A => StackSafe[ B ] ) : StackSafe[ B ] = StackSafe.flatMap( a )( fn )
-
-    override def unit[ A ]( ele : A ) : StackSafe[ A ] = StackSafe.unit( ele )
+    override val static : MonadStatic[ StackSafe ] = StackSafe
 
     def run() : T = StackSafe.run( this )
 

@@ -1,7 +1,7 @@
 package org.hungerford.fp.types
 
-class MonadCovariantTest[ T[ _ ] <: MonadStatic[ T ] ]( className : String, monadStatic : MonadStatic[ T ], exampleMonads : List[MonadCovariant[ T, Int ] ] )
-  extends ApplicativeCovariantTest[ T ]( className, monadStatic ) {
+class MonadTest[ T[ +_ ] <: Monad[ T, _ ] ]( className : String, monadStatic : MonadStatic[ T ], exampleMonads : List[ T[ Int ] ] )
+  extends ApplicativeTest[ T ]( className, monadStatic ) {
 
     def f[ A ]( ele : A ) : T[ A ] = monadStatic.unit[ A ]( ele : A )
     def flatMap[ A, B ]( ele : T[ A ] )( fn : A => T[ B ] ) : T[ B ] = monadStatic.flatMap( ele )( fn )

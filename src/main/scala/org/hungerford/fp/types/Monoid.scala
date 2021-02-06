@@ -11,17 +11,19 @@ trait MonoidStatic[ T ] {
     def combine[ B ]( a : T, b : T ) : T
 
     def concat[ B ]( eles : FpList[ T ] ) : T = eles match {
-        case FpNil => empty.asInstanceOf[ T ]
+        case FpNil => empty
         case FpList( FpNil, head : T ) => head
         case FpList( fpList : FpList[ T ], head : T ) => combine( concat( fpList ), head )
     }
 }
 
-trait Monoid[ T ] extends MonoidStatic[ T ] { this : T =>
+trait Monoid[ T ] { this : T =>
 
-    def combine( a : T ) : T = combine( this, a )
+    val static : MonoidStatic[ T ]
 
-    def combineM( a : Monoid[ T ] ): Monoid[ T ] = combine( a.native ).asInstanceOf[ Monoid[ T ] ]
+    def combine( a : T ) : T = static.combine( this, a )
+
+    def combineM( a : Monoid[ T ] ): Monoid[ T ] = static.combine( this, a.native ).asInstanceOf[ Monoid[ T ] ]
 
     def native : T = this
 
@@ -29,11 +31,9 @@ trait Monoid[ T ] extends MonoidStatic[ T ] { this : T =>
 
 }
 
-trait MonoidCovariantStatic[ T[ _ ] ] {
+trait MonoidCovariantStatic[ T[ +_ ] ] {
 
-    def empty : T[ Nothing ]
-
-    def emptyM : MonoidCovariant[ T, Nothing ] = empty.asInstanceOf[ MonoidCovariant[ T, Nothing ] ]
+    def empty : T[ _ ]
 
     def combine[ B ]( a : T[ B ], b : T[ B ] ) : T[ B ]
 
@@ -44,15 +44,11 @@ trait MonoidCovariantStatic[ T[ _ ] ] {
     }
 }
 
-trait MonoidCovariant[ T[ _ ], +A ] extends MonoidCovariantStatic[ T ] { this : T[ _ ] =>
+trait MonoidCovariant[ T[ +_ ], +A ] { this : T[ A ] =>
 
-    def combine[ B >: A ]( a : T[ B ] ) : T[ B ] = combine( this.asInstanceOf[ T[ B ] ], a )
+    val static : MonoidCovariantStatic[ T ]
 
-    def combineM[ B >: A ]( a : MonoidCovariant[ T, B ] ): MonoidCovariant[ T, B ] = combine( this.asInstanceOf[ T[ B ] ], a.asInstanceOf[ T[ B ] ] ).asInstanceOf[ MonoidCovariant[ T, B ] ]
-
-    def native[ B >: A ] : T[ B ] = this.asInstanceOf[ T[ B ] ]
-
-    def monoid[ B >: A ] : MonoidCovariant[ T, B ] = this.asInstanceOf[ MonoidCovariant[ T, B ] ]
+    def combine[ B >: A ]( a : T[ B ] ) : T[ B ] = static.combine( this.asInstanceOf[ T[ B ] ], a )
 
 }
 

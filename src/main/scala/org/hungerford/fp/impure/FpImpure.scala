@@ -2,21 +2,15 @@ package org.hungerford.fp.impure
 
 import org.hungerford.fp.basic.{FpSuccess, FpTry}
 import org.hungerford.fp.recursion.{Call, Result, StackSafe}
-import org.hungerford.fp.types.{Monad, MonadCovariant, MonadStatic, Monoid, MonoidStatic}
+import org.hungerford.fp.types.{Monad, MonadStatic, Monoid, MonoidCovariant, MonoidCovariantStatic, MonoidStatic}
 
 import scala.concurrent.ExecutionContext
 
 // An effects type
-sealed trait FpImpure[ +T ] extends MonadCovariant[ FpImpure, T ] with Monoid[ FpImpure[ _ ] ] {
+sealed trait FpImpure[ +T ] extends Monad[ FpImpure, T ] with MonoidCovariant[ FpImpure, T ] {
     def run : () => FpTry[ T ]
 
-    override def flatMap[ A, B ]( a : FpImpure[ A ] )( fn : A => FpImpure[ B ] ) : FpImpure[ B ] = FpImpure.flatMap( a )( fn )
-
-    override def unit[ A ]( ele : A ) : FpImpure[ A ] = FpImpure.unit( ele )
-
-    override def empty : FpImpure[ Unit ] = FpImpure.empty
-
-    override def combine[ B ]( a : FpImpure[ _ ], b : FpImpure[ _ ] ) : FpImpure[ _ ] = FpImpure.combine( a, b )
+    override val static : MonadStatic[ FpImpure ] with MonoidCovariantStatic[ FpImpure ] = FpImpure
 
     def >>[ U ]( fpImpure : FpImpure[ U ] ) : FpImpure[ U ] = this.flatMap( _ => fpImpure )
 
@@ -46,7 +40,8 @@ sealed trait FpImpure[ +T ] extends MonadCovariant[ FpImpure, T ] with Monoid[ F
     }
 }
 
-object FpImpure extends MonadStatic[ FpImpure ] with MonoidStatic[ FpImpure[ _ ] ] {
+object FpImpure extends MonadStatic[ FpImpure ] with MonoidCovariantStatic[ FpImpure ] {
+
     def fromTry[ A ]( block : => FpTry[ A ] ) : FpImpure[ A ] = new FpImpure[A] {
         override def run : ( ) => FpTry[ A ] = () => block
     }
@@ -79,9 +74,10 @@ object FpImpure extends MonadStatic[ FpImpure ] with MonoidStatic[ FpImpure[ _ ]
     override def flatMap[ A, B ]( a : FpImpure[ A ] )
                                 ( fn : A => FpImpure[ B ] ) : FpImpure[ B ] = FpImpure.fromTry ( a.run().flatMap( ( res : A ) => fn( res ).run() ) )
 
-    override def empty : FpImpure[ Unit ] = FpImpure[ Unit ]( () => () )
-
-    override def combine[ B ]( a : FpImpure[ _ ], b : FpImpure[ _ ] ) : FpImpure[ _ ] = a >> b
+    override def empty : FpImpure[ Unit ] = FpImpure[ Unit ]( () )
 
     override def unit[ A ]( ele : A ) : FpImpure[ A ] = FpImpure ( ele )
+
+    override def combine[ B ]( a : FpImpure[ B ],
+                               b : FpImpure[ B ] ) : FpImpure[ B ] = a >> b
 }

@@ -1,8 +1,8 @@
 package org.hungerford.fp.recursion
 
-import org.hungerford.fp.types.MonadCovariantTest
+import org.hungerford.fp.types.MonadTest
 
-class StackSafeTest extends MonadCovariantTest(
+class StackSafeTest extends MonadTest[ StackSafe ](
     "StackSafe",
     StackSafe,
     List(
