@@ -382,40 +382,40 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with Monad[ FpImpureList, T ]
             }
     }( () => this.headOption, this.tailOption )
 
-    def foldLeft[ A, B >: T ]( aggregate : A )( fn : (A, B) => A ) : () => A = StackSafe.selfCall2[ () => A, FpImpureList[ B ], () => A ] {
+    def foldLeft[ A, B >: T ]( aggregate : A )( fn : (A, B) => A ) : FpImpure[ A ] = StackSafe.selfCall2[ FpImpure[ A ], FpImpureList[ B ], FpImpure[ A ] ] {
         thisFn =>
-            ( aggFn, ll ) => ll match {
-                case FpImpureNil => Result( aggFn )
-                case FpImpureFail( _ ) => Result( aggFn )
+            ( aggImp, ll ) => ll match {
+                case FpImpureNil => Result( aggImp )
+                case FpImpureFail( _ ) => Result( aggImp )
                 case FpImpureListEval( v, next ) => Call.from {
-                    thisFn( () => fn( aggFn(), v ), next )
+                    thisFn( aggImp.map( ( a : A ) => fn( a, v ) ), next )
                 }
                 case FpUnevaluatedImpureList( evalImpure ) => Call.from {
                     evalImpure.ss.flatMap {
-                        case FpSuccess( v ) => thisFn( aggFn, v )
-                        case FpFailure( _ ) => Result( aggFn )
+                        case FpSuccess( v ) => thisFn( aggImp, v )
+                        case FpFailure( _ ) => Result( aggImp )
                     }
                 }
             }
-    }( () => aggregate, this )
+    }( FpImpure( aggregate ), this )
 
-    def foldRight[ A, B >: T ]( aggregate : A )( fn : (A, B) => A ) : () => A = reverse.foldLeft( aggregate )( fn )
+    def foldRight[ A, B >: T ]( aggregate : A )( fn : (A, B) => A ) : FpImpure[ A ] = reverse.foldLeft( aggregate )( fn )
 
     private def toStringInternal[ A ]( ll : FpImpureList[ A ] ) : String = StackSafe.selfCall2 [ String, FpImpureList[ A ], String ] {
         thisFn =>
             (str, ll) => if ( str.length > 100 ) Result( str + "..." ) else ll match {
                 case FpImpureNil =>
                     if ( str == "" ) Result( "FpImpureNil" )
-                    else Result( s"${str} + FpImpureNil" )
+                    else Result( s"${str}, FpImpureNil" )
                 case FpImpureFail( t ) =>
-                    if ( str == "" ) Result( s"FpImpureFail(${t.getMessage})")
-                    else Result( s"${str} + FpImpureFail(${t.getMessage})")
+                    if ( str == "" ) Result( s"FpImpureFail(${t.toString})")
+                    else Result( s"${str}, FpImpureFail(${t.toString})")
                 case FpUnevaluatedImpureList( _ ) =>
-                    if ( str == "" ) Result( "??" )
-                    else Result( s"${str} + ??" )
+                    if ( str == "" ) Result( "?? (impure)" )
+                    else Result( s"${str}, ?? (impure)" )
                 case FpImpureListEval( head, tail ) => Call.from {
                     if ( str == "" ) thisFn( s"${head.toString}", tail )
-                    else thisFn( s"$str + ${head.toString}", tail )
+                    else thisFn( s"$str, ${head.toString}", tail )
                 }
             }
     }( "", ll )
@@ -451,12 +451,11 @@ object FpImpureList extends MonadStatic[ FpImpureList ] {
 
     def apply[ A ]( ele : A ) : FpImpureList[ A ] = unit( ele )
 
-    def fromImpure[ A ]( imp : => FpImpure[ FpImpureList[ A ] ] ) : FpImpureList[ A ] = FpUnevaluatedImpureList( FpImpure.fromSs( imp.ss.flatMap {
-        case FpSuccess( res ) => res.impure.ss
-        case FpFailure( t ) => FpImpureFail( t ).impure.ss
-    } ) )
+    def fromImpure[ A ]( imp : FpImpure[ FpEvaluatedImpureList[ A ] ] ) : FpImpureList[ A ] = {
+        FpUnevaluatedImpureList( imp )
+    }
 
-    def makeImpure[ A ]( ll : => FpImpureList[ A ] ) : FpImpureList[ A ] = fromImpure( ll.impure )
+    def makeImpure[ A ]( ll : => FpImpureList[ A ] ) : FpImpureList[ A ] = fromImpure( FpImpure.fromSs( Call.from( ll.impure.ss ) ) )
 
     def fromFpList[ A ]( list : FpList[ A ] ) : FpImpureList[ A ] = StackSafe.selfCall[ FpList[ A ], FpImpureList[ A ] ] {
         ( thisFn : FpList[ A ] => StackSafe[FpImpureList[ A ] ] ) => {
@@ -469,7 +468,7 @@ object FpImpureList extends MonadStatic[ FpImpureList ] {
 
     def fromLeft[ A ]( init : A )( fn : A => A ) : FpImpureList[ A ] = StackSafe.selfCall[ A, FpImpureList[ A ] ] {
         thisFn => a => Result( FpUnevaluatedImpureList(
-            FpImpure.fromSs( thisFn( fn( a ) ).map( ll => FpSuccess( FpImpureListEval( a, ll ) ) ) )
+            FpImpure.fromSs( Call.from( thisFn( fn( a ) ).map( ll => FpSuccess( FpImpureListEval( a, ll ) ) ) ) )
         ) )
     }( init )
 

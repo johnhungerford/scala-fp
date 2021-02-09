@@ -154,7 +154,7 @@ object FpList
             case FpNil => Result( FpNil )
             case FpLs( head, FpNil ) => Result( f( head ) )
             case FpLs( h, t ) => Call.from {
-                thisFn( t, f ).map( _ :++ fn( h ) )
+                thisFn( t, f ).map( fn( h ) :++ _ )
             }
         }
     }( a, fn )

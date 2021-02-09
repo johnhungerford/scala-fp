@@ -3,7 +3,7 @@ package org.hungerford.fp.collections
 import org.hungerford.fp.basic.FpSome
 import org.hungerford.fp.types.MonadTest
 
-class FpLazyListTest extends MonadTest(
+class FpLazyListMonadTest extends MonadTest(
     "FpLazyList",
     FpLazyList,
     List(
@@ -34,3 +34,8 @@ class FpLazyListTest extends MonadTest(
         test( 1000000 ) shouldBe FpSome( 1000000 )
     }
 }
+
+class FpLazyListSeqTest extends FpSeqTest[ FpLazyList ](
+    "FpLazyList",
+    List( FpLazyNil ),
+)

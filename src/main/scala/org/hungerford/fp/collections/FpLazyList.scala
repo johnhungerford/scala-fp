@@ -351,13 +351,13 @@ sealed trait FpLazyList[ +T ] extends FpSeq[ T ] with Monad[ FpLazyList, T ] {
             (str, ll) => if ( str.length > 100 ) Result( str + "..." ) else ll match {
             case FpLazyNil =>
                 if ( str == "" ) Result( "FpLazyNil" )
-                else Result( s"${str} + FpLazyNil" )
+                else Result( s"${str}, FpLazyNil" )
             case FpUnevaluatedLazyList( _ ) =>
-                if ( str == "" ) Result( "??" )
-                else Result( s"${str} + ??" )
+                if ( str == "" ) Result( "?? (lazy)" )
+                else Result( s"${str}, ?? (lazy)" )
             case FpLazyListEval( head, tail ) => Call.from {
                 if ( str == "" ) thisFn( s"${head.toString}", tail )
-                else thisFn( s"$str + ${head.toString}", tail )
+                else thisFn( s"$str, ${head.toString}", tail )
 
             }
         }
