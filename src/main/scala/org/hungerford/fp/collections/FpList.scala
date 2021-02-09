@@ -25,6 +25,14 @@ sealed trait FpList[ +T ] extends FpSeq[ T ] with Monad[ FpList, T ] with Monoid
 
     override def tailOption : FpOption[ FpList[ T ] ] = FpList.tailOption( this )
 
+    override def lastOption : FpOption[ T ] = StackSafe.selfCall2[ FpOption[ T ], FpList[ T ], FpOption[ T ] ] {
+        thisFn =>
+            (init, l) => l match {
+                case FpNil => Result( init )
+                case FpLs( v, tail ) => Call.from( thisFn( FpSome( v ), tail ) )
+            }
+    }( FpNone, this )
+
     override def +:[ B >: T ]( ele : B ) : FpList[ B ] = FpList.prepend[ T, B ]( this, ele )
     override def :+[ B >: T ]( ele : B ) : FpList[ B ] = this :++ static.unit( ele )
 

@@ -1,6 +1,6 @@
 package org.hungerford.fp.impure
 
-import org.hungerford.fp.basic.{FpSuccess, FpTry}
+import org.hungerford.fp.basic.{FpFailure, FpSuccess, FpTry}
 import org.hungerford.fp.recursion.{Call, Result, StackSafe}
 import org.hungerford.fp.types.{Monad, MonadStatic, Monoid, MonoidCovariant, MonoidCovariantStatic, MonoidStatic}
 
@@ -8,7 +8,9 @@ import scala.concurrent.ExecutionContext
 
 // An effects type
 sealed trait FpImpure[ +T ] extends Monad[ FpImpure, T ] with MonoidCovariant[ FpImpure, T ] {
-    def run : () => FpTry[ T ]
+    private[impure] val ss : StackSafe[ FpTry[ T ] ]
+
+    def run : () => FpTry[ T ] = () => ss.run()
 
     override val static : MonadStatic[ FpImpure ] with MonoidCovariantStatic[ FpImpure ] = FpImpure
 
@@ -20,19 +22,20 @@ sealed trait FpImpure[ +T ] extends Monad[ FpImpure, T ] with MonoidCovariant[ F
 
     def async[ B >: T ]( implicit ec : ExecutionContext ) : FpImpureFuture[ B ] = FpImpureFuture.fromImpure( this )
 
-    private def doWhileStatic[ B >: T ] : (FpImpure[ B ], B => Boolean) => FpImpure[ B ] = StackSafe.selfCall2[ FpImpure[ B ], B => Boolean, FpImpure[ B ] ] {
+    private def doWhileStatic[ B >: T ]( imp : FpImpure[ B ] )( fn : B => Boolean) : FpImpure[ B ] = StackSafe.selfCall2[ FpImpure[ B ], B => Boolean, FpImpure[ B ] ] {
         thisFn =>
             ( ele : FpImpure[ B ], cnd : B => Boolean ) =>
-                ele.run() match {
-                    case FpSuccess( res ) if ( !cnd( res ) ) => Result( FpImpure( res ) )
-                    case _ =>
-                        Call.from {
+                Call.from {
+                    ele.ss.flatMap {
+                        case FpSuccess( res ) if !cnd( res  ) => Result( FpImpure( res ) )
+                        case _ => Call.from {
                             thisFn( ele, cnd )
                         }
+                    }
                 }
-    }
+    } ( imp, fn )
 
-    final def doWhile( condition : T => Boolean ) : FpImpure[ T ] = FpImpure.fromTry { doWhileStatic( this, condition ).run() }
+    final def doWhile( condition : T => Boolean ) : FpImpure[ T ] = FpImpure.fromTry { doWhileStatic( this )( condition ).run() }
 
     override def equals( obj : Any ) : Boolean = obj match {
         case fpi : FpImpure[ _ ] => fpi.run() == this.run()
@@ -43,36 +46,44 @@ sealed trait FpImpure[ +T ] extends Monad[ FpImpure, T ] with MonoidCovariant[ F
 object FpImpure extends MonadStatic[ FpImpure ] with MonoidCovariantStatic[ FpImpure ] {
 
     def fromTry[ A ]( block : => FpTry[ A ] ) : FpImpure[ A ] = new FpImpure[A] {
-        override def run : ( ) => FpTry[ A ] = () => block
+        override private[impure] val ss : StackSafe[ FpTry[ A ] ] = Call.from( Result( block ) )
     }
 
     def apply[ A ]( block : => A ) : FpImpure[ A ] = new FpImpure[ A ] {
-        override def run : ( ) => FpTry[ A ] = ( ) => FpTry( block )
+        override private[impure] val ss : StackSafe[ FpTry[ A ] ] = Call.from( Result( FpTry( block ) ) )
+    }
+
+    private[ impure ] def fromSs[ A ]( stackSafe : => StackSafe[ FpTry[ A ] ] ) : FpImpure[ A ] = new FpImpure[ A ] {
+        override private[ impure ] val ss = stackSafe
     }
 
     def loop[ A ]( times : Int )( impure : FpImpure[ A ] ) : FpImpure[ A ] = FpImpure.fromTry ( StackSafe.selfCall2[ Int, FpImpure[ A ], FpTry[ A ] ] {
         thisFn =>
             ( n : Int, imp : FpImpure[ A ] ) =>
-                if ( n <= 1 ) Result( imp.run() )
+                if ( n <= 1 ) Call.from( imp.ss )
                 else {
-                    imp.run()
                     Call.from {
+                        imp.ss.run()
                         thisFn( n - 1, imp )
                     }
                 }
     }( times, impure ) )
 
-    def loop[ A ]( impure : FpImpure[ A ] ) : FpImpure[ Unit ] = FpImpure( StackSafe.selfCall[ FpImpure[ A ], A ] {
-        thisFn => imp =>
-            imp.run() match {
-                case _ => Call.from {
-                    thisFn( imp )
-                }
-            }
-    }( impure ) )
+    def loop[ A ]( impure : FpImpure[ A ] ) : FpImpure[ Unit ] = FpImpure.fromTry( StackSafe.selfCall[ FpImpure[ A ], FpTry[ A ] ] {
+        thisFn => stackSafe =>
+          Call.from {
+              stackSafe.run()
+              thisFn( stackSafe )
+          }
+    }( impure ) ).map( _ => () )
 
     override def flatMap[ A, B ]( a : FpImpure[ A ] )
-                                ( fn : A => FpImpure[ B ] ) : FpImpure[ B ] = FpImpure.fromTry ( a.run().flatMap( ( res : A ) => fn( res ).run() ) )
+                                ( fn : A => FpImpure[ B ] ) : FpImpure[ B ] = {
+        fromSs( a.ss.flatMap {
+            case FpSuccess( res ) => fn( res ).ss
+            case failed@FpFailure( _ ) => Result( failed )
+        } )
+    }
 
     override def empty : FpImpure[ Unit ] = FpImpure[ Unit ]( () )
 

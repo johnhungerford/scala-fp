@@ -13,6 +13,8 @@ trait FpSeq[ +T ] {
 
     def tailOption : FpOption[ FpSeq[ T ] ]
 
+    def lastOption : FpOption[ T ]
+
     def +:[ B >: T ]( ele : B ) : FpSeq[ B ]
 
     def :+[ B >: T ]( ele : B ) : FpSeq[ B ]
