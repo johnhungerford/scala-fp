@@ -1,8 +1,7 @@
 package org.hungerford.fp.impure
 
 import org.hungerford.fp.basic.{FpFailure, FpNone, FpOption, FpSome, FpSuccess, FpTry}
-import org.hungerford.fp.impure
-import org.hungerford.fp.types.{Monad, MonadStatic, WithTransformer}
+import org.hungerford.fp.types.{Monad, MonadStatic}
 
 import scala.annotation.tailrec
 import scala.concurrent.duration.Duration

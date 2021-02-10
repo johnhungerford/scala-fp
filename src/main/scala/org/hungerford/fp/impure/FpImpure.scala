@@ -2,17 +2,17 @@ package org.hungerford.fp.impure
 
 import org.hungerford.fp.basic.{FpFailure, FpSuccess, FpTry}
 import org.hungerford.fp.recursion.{Call, Result, StackSafe}
-import org.hungerford.fp.types.{Monad, MonadStatic, Monoid, MonoidCovariant, MonoidCovariantStatic, MonoidStatic}
+import org.hungerford.fp.types.{Monad, MonadStatic, TypedMonoid, TypedMonoidStatic}
 
 import scala.concurrent.ExecutionContext
 
 // An effects type
-sealed trait FpImpure[ +T ] extends Monad[ FpImpure, T ] with MonoidCovariant[ FpImpure, T ] {
+sealed trait FpImpure[ +T ] extends Monad[ FpImpure, T ] with TypedMonoid[ FpImpure, T ] {
     private[impure] val ss : StackSafe[ FpTry[ T ] ]
 
     def run : () => FpTry[ T ] = () => ss.run()
 
-    override val static : MonadStatic[ FpImpure ] with MonoidCovariantStatic[ FpImpure ] = FpImpure
+    override val static : MonadStatic[ FpImpure ] with TypedMonoidStatic[ FpImpure ] = FpImpure
 
     def >>[ U ]( fpImpure : FpImpure[ U ] ) : FpImpure[ U ] = this.flatMap( _ => fpImpure )
 
@@ -43,7 +43,7 @@ sealed trait FpImpure[ +T ] extends Monad[ FpImpure, T ] with MonoidCovariant[ F
     }
 }
 
-object FpImpure extends MonadStatic[ FpImpure ] with MonoidCovariantStatic[ FpImpure ] {
+object FpImpure extends MonadStatic[ FpImpure ] with TypedMonoidStatic[ FpImpure ] {
 
     def fromTry[ A ]( block : => FpTry[ A ] ) : FpImpure[ A ] = new FpImpure[A] {
         override private[impure] val ss : StackSafe[ FpTry[ A ] ] = Call.from( Result( block ) )

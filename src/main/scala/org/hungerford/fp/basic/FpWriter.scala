@@ -1,84 +1,89 @@
 package org.hungerford.fp.basic
 
-import org.hungerford.fp.types.{Monad, MonadInvariant, MonadStatic, MonadStaticInvariant, Monoid, MonoidCovariant, MonoidCovariantStatic, MonoidStatic}
+import org.hungerford.fp.types.{Monad, MonadInvariant, MonadStatic, MonadStaticInvariant, Monoid, MonoidStatic, TypedMonoid, TypedMonoidStatic}
 
-trait FpWriter[ T, A <: Monoid[ B ], B ] extends MonadInvariant[ ({ type U[ X ] = FpWriter[ X, A, B ] })#U, T ] {
+trait FpWriter[ +T, A <: Monoid[ _ ] ] extends Monad[ ({ type U[ +X ] = FpWriter[ X, A ] })#U, T ] {
     def value : T
     def context : A
 
-    override val static : MonadStaticInvariant[ ( {
-        type U[ X ] = FpWriter[ X, A, B ]
-    } )#U ] = FpWriter.Static[ A, B ]( context.static )
+    override val static : MonadStatic[ ( {
+        type U[ +X ] = FpWriter[ X, A ]
+    } )#U ] = FpWriter.Static[ A ]( context.static.asInstanceOf[ MonoidStatic[ A ] ] )
 
-    override def toString : String = s"FpWriterCovariant( ${value}, ${context} )"
+    override def toString : String = s"FpWriterTyped( ${value}, ${context} )"
 
 }
 
 object FpWriter {
-    def apply[ T, A <: Monoid[ B ], B ]( v : T, c : A ) : FpWriter[ T, A, B ] = new FpWriter[ T, A, B ] {
+    def apply[ T, A <: Monoid[ _ ] ]( v : T, c : A ) : FpWriter[ T, A ] = new FpWriter[ T, A ] {
         override def value : T = v
         override def context : A = c
 
-        override val static : MonadStaticInvariant[ ( {
-            type U[ X ] = FpWriter[ X, A, B ]
-        } )#U ] = Static[ A, B ]( c.static )
-    }
-
-    def unapply[ T, A <: Monoid[ B ], B ]( writer : FpWriter[ T, A, B ] ) : Option[(T, A)] = Some( (writer.value, writer.context) )
-
-    def Static[ A <: Monoid[ B ], B ]( monoidStatic : MonoidStatic[ B ] ) : MonadStaticInvariant[ ({ type U[ X ] = FpWriter[ X, A, B ] })#U ] = new MonadStaticInvariant[ ({ type U[ X ] = FpWriter[ X, A, B ] })#U ] {
-        override def flatMap[ X, Y ]( a : FpWriter[ X, A, B ] )
-                                    ( fn : X => FpWriter[ Y, A, B ] ) : FpWriter[ Y, A, B ] = a match {
-            case FpWriter( v, c : Monoid[ B ] ) =>
-                val FpWriter( newV, newC : Monoid[ B ] ) = fn( v )
-                FpWriter[ Y, A, B ]( newV, c.combineM( newC ).asInstanceOf[ A ] )
-        }
-
-        override def unit[ X ]( ele : X ) : FpWriter[ X, A, B ] = FpWriter[ X, A, B ]( ele, monoidStatic.empty.asInstanceOf[ A ] )
-    }
-}
-
-trait FpWriterCovariant[ +T, A[ +_ ] <: MonoidCovariant[ A, B ], B ]
-  extends Monad[ ({ type U[ +X ] = FpWriterCovariant[ X, A, B ] })#U, T ] {
-
-    def value : T
-    def context : A[ B ]
-
-    override val static : MonadStatic[ ( {
-        type U[ +X ] = FpWriterCovariant[ X, A, B ]
-    } )#U ] = FpWriterCovariant.Static[ A, B ]( context.static )
-
-    override def toString : String = s"FpWriterCovariant( ${value}, ${context} )"
-
-}
-
-object FpWriterCovariant {
-
-    def apply[ T, A[ +_ ] <: MonoidCovariant[ A, B ], B ]( v : T, c : A[ B ] ) : FpWriterCovariant[ T, A, B ] = new FpWriterCovariant[ T, A, B ] {
-        override def value : T = v
-
-        override def context : A[ B ] = c
+        override val static : MonadStatic[ ( {
+            type U[ +X ] = FpWriter[ X, A ]
+        } )#U ] = Static[ A ]( c.static.asInstanceOf[ MonoidStatic[ A ] ] )
 
         override def equals( obj : Any ) : Boolean = obj match {
-            case fpw : FpWriterCovariant[ _, A, B ] => fpw.value == v && fpw.context == c
+            case FpWriter( thatV, thatC ) => value == thatV && context == thatC
             case _ => false
         }
     }
 
-    def unapply[ T, A[ +_ ] <: MonoidCovariant[ A, B ], B ]( writer : FpWriterCovariant[ T, A, B ] ) : Option[ (T, A[ B ]) ] = Some( writer.value, writer.context )
+    def unapply[ T, A <: Monoid[ _ ] ]( writer : FpWriter[ T, A ] ) : Option[(T, A)] = Some( (writer.value, writer.context) )
 
-    def Static[ A[ +_ ] <: MonoidCovariant[ A, B ], B ]( monoidStatic : MonoidCovariantStatic[ A ] ) : MonadStatic[ ({ type U[ +X ] = FpWriterCovariant[ X, A, B ] })#U ] = {
-        new MonadStatic[ ({ type U[ +X ] = FpWriterCovariant[ X, A, B ] })#U ] {
+    def Static[ A <: Monoid[ _ ] ]( monoidStatic : MonoidStatic[ A ] ) : MonadStatic[ ({ type U[ +X ] = FpWriter[ X, A ] })#U ] = new MonadStatic[ ({ type U[ +X ] = FpWriter[ X, A ] })#U ] {
+        override def flatMap[ X, Y ]( a : FpWriter[ X, A ] )
+                                    ( fn : X => FpWriter[ Y, A ] ) : FpWriter[ Y, A ] = a match {
+            case FpWriter( v : X , c : A ) =>
+                val newWriter : FpWriter[ Y, A ] = fn( v )
+                FpWriter[ Y, A ]( newWriter.value, monoidStatic.combine( c, newWriter.context ) )
+        }
+
+        override def unit[ X ]( ele : X ) : FpWriter[ X, A ] = FpWriter[ X, A ]( ele, monoidStatic.empty.asInstanceOf[ A ] )
+    }
+}
+
+trait FpWriterTyped[ +T, A[ +_ ] <: TypedMonoid[ A, _ ] ]
+  extends Monad[ ({ type U[ +X ] = FpWriterTyped[ X, A ] })#U, T ] {
+
+    def value : T
+    def context : A[ _ ]
+
+    override val static : MonadStatic[ ( {
+        type U[ +X ] = FpWriterTyped[ X, A ]
+    } )#U ] = FpWriterTyped.Static[ A ]( context.static )
+
+    override def toString : String = s"FpWriterTyped( ${value}, ${context} )"
+
+}
+
+object FpWriterTyped {
+
+    def apply[ T, A[ +_ ] <: TypedMonoid[ A, _ ] ]( v : T, c : A[ _ ] ) : FpWriterTyped[ T, A ] = new FpWriterTyped[ T, A ] {
+        override def value : T = v
+
+        override def context : A[ _ ] = c
+
+        override def equals( obj : Any ) : Boolean = obj match {
+            case fpw : FpWriterTyped[ _, A ] => fpw.value == v && fpw.context == c
+            case _ => false
+        }
+    }
+
+    def unapply[ T, A[ +_ ] <: TypedMonoid[ A, _ ] ]( writer : FpWriterTyped[ T, A ] ) : Option[ (T, A[ _ ]) ] = Some( writer.value, writer.context )
+
+    def Static[ A[ +_ ] <: TypedMonoid[ A, _ ] ]( monoidStatic : TypedMonoidStatic[ A ] ) : MonadStatic[ ({ type U[ +X ] = FpWriterTyped[ X, A ] })#U ] = {
+        new MonadStatic[ ({ type U[ +X ] = FpWriterTyped[ X, A ] })#U ] {
 
 
-            override def flatMap[ C, D ]( a : FpWriterCovariant[ C, A, B ] )
-                                        ( fn : C => FpWriterCovariant[ D, A, B ] ) : FpWriterCovariant[ D, A, B ] = a match {
-                case FpWriterCovariant( v : C, c : A[ B ] ) =>
-                    val FpWriterCovariant( newV : D, newC : A[ B ] ) = fn( v )
-                    FpWriterCovariant[ D, A, B ]( newV, c.combine( newC ) )
+            override def flatMap[ C, D ]( a : FpWriterTyped[ C, A ] )
+                                        ( fn : C => FpWriterTyped[ D, A ] ) : FpWriterTyped[ D, A ] = a match {
+                case FpWriterTyped( v : C, c ) =>
+                    val FpWriterTyped( newV : D, newC ) = fn( v )
+                    FpWriterTyped[ D, A ]( newV, c.combine( newC ) )
             }
 
-            override def unit[ X ]( ele : X ) : FpWriterCovariant[ X, A, B ] = FpWriterCovariant[ X, A, B ]( ele, monoidStatic.empty.asInstanceOf[ A[ B ] ] )
+            override def unit[ X ]( ele : X ) : FpWriterTyped[ X, A ] = FpWriterTyped[ X, A ]( ele, monoidStatic.empty )
         }
     }
 }

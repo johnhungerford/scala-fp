@@ -33,6 +33,7 @@ trait FpString extends Monoid[ FpString ] {
 
   override def equals( obj : Any ) : Boolean = obj match {
     case str : FpString => str.toFpList == toFpList
+    case _ => false
   }
 }
 
@@ -49,5 +50,5 @@ object FpString extends MonoidStatic[ FpString ] {
 
   override def empty : FpString = FpString( FpNil )
 
-  override def combine[ B ]( a : FpString, b : FpString ) : FpString = FpString( a.toFpList :++ b.toFpList )
+  override def combine( a : FpString, b : FpString ) : FpString = FpString( a.toFpList :++ b.toFpList )
 }

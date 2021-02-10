@@ -2,10 +2,10 @@ package org.hungerford.fp.collections
 
 import org.hungerford.fp.basic.{FpNone, FpOption, FpSome}
 import org.hungerford.fp.recursion.{Call, Result, StackSafe}
-import org.hungerford.fp.types.{Monad, MonadStatic}
+import org.hungerford.fp.types.{Monad, MonadStatic, TypedMonoid, TypedMonoidStatic}
 
-sealed trait FpLazyList[ +T ] extends FpSeq[ T ] with Monad[ FpLazyList, T ] {
-    override val static : MonadStatic[ FpLazyList ] = FpLazyList
+sealed trait FpLazyList[ +T ] extends FpSeq[ T ] with Monad[ FpLazyList, T ] with TypedMonoid[ FpLazyList, T ] {
+    override val static : MonadStatic[ FpLazyList ] with TypedMonoidStatic[ FpLazyList ] = FpLazyList
 
     private[ collections ] val ss : StackSafe[ FpEvaluatedLazyList[ T ] ]
 
@@ -125,6 +125,8 @@ sealed trait FpLazyList[ +T ] extends FpSeq[ T ] with Monad[ FpLazyList, T ] {
         case FpLazyListEval( _, tail ) => FpSome( tail )
     }
 
+    override def tailOrNil : FpSeq[ T ] = tailOption.getOrElse( FpLazyNil )
+
     override def lastOption : FpOption[ T ] = StackSafe.selfCall2[ FpOption[ T ], FpLazyList[ T ], FpOption[ T ] ] {
         thisFn =>
             ( init, ll ) => ll match {
@@ -212,19 +214,17 @@ sealed trait FpLazyList[ +T ] extends FpSeq[ T ] with Monad[ FpLazyList, T ] {
     }( this )
 
 
-    override def drop( num : Int ) : FpLazyList[ T ] = {
-        val res = StackSafe.selfCall2[ Int, FpLazyList[ T ], FpLazyList[ T ] ] {
-            thisFn =>
-                (i, ll) => if ( i < 1 ) Result( ll ) else ll match {
-                    case FpLazyNil => Result( FpLazyNil )
-                    case FpLazyListEval( v, next ) => Call.from {
-                        thisFn( i - 1, next ).map( nextL => FpLazyListEval( v, nextL ) )
-                    }
-                    case FpUnevaluatedLazyList( evalLazy ) => evalLazy.flatMap( v => thisFn( i , v ) )
+    override def drop( num : Int ) : FpLazyList[ T ] = StackSafe.selfCall2[ Int, FpLazyList[ T ], FpLazyList[ T ] ] {
+        thisFn =>
+            (i, ll) => if ( i < 1 ) Result( ll ) else ll match {
+                case FpLazyNil => Result( FpLazyNil )
+                case FpLazyListEval( v, next ) => Call.from {
+                    thisFn( i - 1, next )
                 }
-        }( if ( num < 0 ) -num else num, if ( num < 0 ) this else this.reverse )
-        if ( num < 0 ) res else res.reverse
-    }
+                case FpUnevaluatedLazyList( evalLazy ) => evalLazy.flatMap( v => thisFn( i , v ) )
+            }
+    }( num, this )
+
 
     override def dropWhile( fn : T => Boolean ) : FpLazyList[ T ] = StackSafe.selfCall[ FpLazyList[ T ], FpLazyList[ T ] ] {
         thisFn => {
@@ -259,7 +259,7 @@ sealed trait FpLazyList[ +T ] extends FpSeq[ T ] with Monad[ FpLazyList, T ] {
                         thisFn( next, set )
                     }
                     case FpLazyListEval( v, next ) => Call.from {
-                        thisFn( next, set + v ).map( _ :+ v )
+                        thisFn( next, set + v ).map( v +: _ )
                     }
                     case FpUnevaluatedLazyList( evalLazy ) => evalLazy.flatMap( v => thisFn( v, set )  )
                 }
@@ -269,13 +269,25 @@ sealed trait FpLazyList[ +T ] extends FpSeq[ T ] with Monad[ FpLazyList, T ] {
         (this.filter( fn ), this.filter( t => !fn( t ) ))
     }
 
-    override def collect[ B >: T ]( fn : PartialFunction[ T, B ] ) : FpLazyList[ B ] = ???
+    override def collect[ B ]( fn : PartialFunction[ T, B ] ) : FpLazyList[ B ] = StackSafe.selfCall[ FpLazyList[ T ], FpLazyList[ B ] ] {
+        thisFn => {
+            case FpLazyNil => Result( FpLazyNil )
+            case FpLazyListEval( v, next ) => if ( fn.isDefinedAt( v ) ) {
+                Call.from {
+                    thisFn( next ).map( ll => FpLazyListEval( fn( v ), ll ) )
+                }
+            } else Call.from( thisFn( next ) )
+            case FpUnevaluatedLazyList( evalSs ) => Result( FpUnevaluatedLazyList(
+                Call.from( evalSs.flatMap( ll => thisFn( ll ).flatMap( _.ss ) ) )
+            ) )
+        }
+    }( this )
 
     override def sort[ B >: T ]( implicit ord : Ordering[ B ] ) : FpLazyList[ B ] = {
         FpLazyList.makeLazy( FpLazyList.fromFpList( toFpList.asInstanceOf[ FpList[ B ] ].sort ) )
     }
 
-    override def sortBy[ B >: T, C ]( fn : B => C )( implicit ord : Ordering[ C ] ) : FpLazyList[ B ] = ???
+    override def sortBy[ C ]( fn : T => C )( implicit ord : Ordering[ C ] ) : FpLazyList[ T ] = sort( Ordering.by( fn ) )
 
     override def sortWith[ B >: T ]( cmp : (B, B) => Int ) : FpLazyList[ B ] = sort( new Ordering[ B ] {
         override def compare( x : B, y : B ) : Int = cmp( x, y )
@@ -311,14 +323,12 @@ sealed trait FpLazyList[ +T ] extends FpSeq[ T ] with Monad[ FpLazyList, T ] {
             }
     }( 0, this )
 
-    override def withLeft[ B >: T ]( start : B )( fn : (B, B) => B ) : FpLazyList[ B ] = {
-        val zipped = ( this.headOption.map( v => static.unit(v, start) ).getOrElse( FpLazyNil ) :++
-                       this.tailOption.getOrElse( FpLazyNil ).zipWith( this ) )
-        zipped.map( tup => fn( tup._1, tup._2 ) )
+    override def mapWithLeft[ B >: T ]( start : B )( fn : (B, B) => B ) : FpLazyList[ B ] = {
+        ( start +: this ).zipWith( this ).map( t => fn( t._1, t._2 ) )
     }
 
-    override def withRight[ B >: T ]( end : B )( fn : (B, B) => B ) : FpLazyList[ B ] = {
-        this.zipWith( this.tailOption.getOrElse( FpLazyNil ) :+ end ).map( tup => fn( tup._1, tup._2 ) )
+    override def mapWithRight[ B >: T ]( end : B )( fn : (B, B) => B ) : FpLazyList[ B ] = {
+        this.zipWith( this.tailOption.getOrElse( FpLazyNil ) :+ end ).map( t => fn( t._1, t._2 ) )
     }
 
     def reduce[ B >: T ]( fn : (B, B) => B ) : () => FpOption[ B ] = StackSafe.selfCall2[ () => FpOption[ B ], FpOption[ FpLazyList[ B ] ], () => FpOption[ B ] ] {
@@ -369,7 +379,7 @@ sealed trait FpLazyList[ +T ] extends FpSeq[ T ] with Monad[ FpLazyList, T ] {
 
 case class FpUnevaluatedLazyList[ +T ]( override val ss : StackSafe[ FpEvaluatedLazyList[ T ] ] ) extends FpLazyList[ T ] {
     override def equals( obj : Any ) : Boolean = obj match {
-        case ll : FpLazyList[ _ ] => this.toList == ll.toList
+        case ll : FpLazyList[ _ ] => this.toFpList == ll.toFpList
         case _ => false
     }
 }
@@ -382,12 +392,12 @@ case object FpLazyNil extends FpEvaluatedLazyList[ Nothing ]
 
 case class FpLazyListEval[ +T ]( head : T, tail : FpLazyList[ T ] ) extends FpEvaluatedLazyList[ T ] {
     override def equals( obj : Any ) : Boolean = obj match {
-        case ll : FpLazyList[ _ ] => this.toList == ll.toList
+        case ll : FpLazyList[ _ ] => this.toFpList == ll.toFpList
         case _ => false
     }
 }
 
-object FpLazyList extends MonadStatic[ FpLazyList ] {
+object FpLazyList extends MonadStatic[ FpLazyList ] with TypedMonoidStatic[ FpLazyList ] {
 
     def apply[ A ]( ele : A ) : FpLazyList[ A ] = unit( ele )
 
@@ -437,4 +447,6 @@ object FpLazyList extends MonadStatic[ FpLazyList ] {
     }( a )
 
     override def unit[ A ]( ele : A ) : FpLazyList[ A ] = ele +: FpLazyNil
+
+    override def empty : FpLazyList[ Nothing ] = FpLazyNil
 }

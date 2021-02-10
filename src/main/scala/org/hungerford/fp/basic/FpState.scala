@@ -3,7 +3,8 @@ package org.hungerford.fp.basic
 import org.hungerford.fp.types.{Monad, MonadStatic, WithTransformer}
 
 
-class FpState[ StateType, +ReturnType ]( private val fn : StateType => (ReturnType, StateType) ) extends Monad[ ({ type U[ +X ] = FpState[ StateType, X ] })#U, ReturnType ] {
+class FpState[ StateType, +ReturnType ]( private val fn : StateType => (ReturnType, StateType) )
+  extends Monad[ ({ type U[ +X ] = FpState[ StateType, X ] })#U, ReturnType ] {
     def apply( state : StateType ) : (ReturnType, StateType) = fn( state )
 
     def * ( numTimes : Int ) : FpState[ StateType, ReturnType ] = {

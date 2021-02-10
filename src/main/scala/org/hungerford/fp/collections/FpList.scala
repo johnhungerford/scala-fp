@@ -2,12 +2,12 @@ package org.hungerford.fp.collections
 
 import org.hungerford.fp.basic.{FpNone, FpOption, FpSome}
 import org.hungerford.fp.recursion.{Call, Result, StackSafe}
-import org.hungerford.fp.types.{Monad, MonadStatic, MonoidCovariant, MonoidCovariantStatic, WithTransformer}
+import org.hungerford.fp.types.{Monad, MonadStatic, TypedMonoid, TypedMonoidStatic, WithTransformer}
 
 import scala.annotation.tailrec
 
-sealed trait FpList[ +T ] extends FpSeq[ T ] with Monad[ FpList, T ] with MonoidCovariant[ FpList, T ] {
-    override val static : MonadStatic[ FpList ] with MonoidCovariantStatic[ FpList ] = FpList
+sealed trait FpList[ +T ] extends FpSeq[ T ] with Monad[ FpList, T ] with TypedMonoid[ FpList, T ] {
+    override val static : MonadStatic[ FpList ] with TypedMonoidStatic[ FpList ] = FpList
 
     override def apply[ B >: T ]( index : Int ) : FpOption[ B ] = StackSafe.selfCall2 [Int, FpList[ B ], FpOption[ B ] ] {
         thisFn =>
@@ -24,6 +24,8 @@ sealed trait FpList[ +T ] extends FpSeq[ T ] with Monad[ FpList, T ] with Monoid
     override def headOption : FpOption[ T ] = FpList.headOption( this )
 
     override def tailOption : FpOption[ FpList[ T ] ] = FpList.tailOption( this )
+
+    override def tailOrNil : FpSeq[ T ] = tailOption.getOrElse( FpNil )
 
     override def lastOption : FpOption[ T ] = StackSafe.selfCall2[ FpOption[ T ], FpList[ T ], FpOption[ T ] ] {
         thisFn =>
@@ -43,9 +45,7 @@ sealed trait FpList[ +T ] extends FpSeq[ T ] with Monad[ FpList, T ] with Monoid
 
     override def reverse : FpList[ T ] = FpList.reverse( this )
 
-    override def lengthOpt : FpOption[ Int ] = FpList.length( this )
-
-    def length : Int = lengthOpt.getOrElse( 0 )
+    def length : Int = FpList.length( this )
 
     override def toString : String = FpList.toString( this )
 
@@ -57,7 +57,7 @@ sealed trait FpList[ +T ] extends FpSeq[ T ] with Monad[ FpList, T ] with Monoid
 
     override def takeWhile( fn : T => Boolean ) : FpList[ T ] = FpList.takeWhile( this )( fn )
 
-    override def drop( num : Int ) : FpList[ T ] = ???
+    override def drop( num : Int ) : FpList[ T ] = FpList.drop( this )( num )
 
     override def dropWhile( fn : T => Boolean ) : FpList[ T ] = FpList.dropWhile( this )( fn )
 
@@ -73,21 +73,45 @@ sealed trait FpList[ +T ] extends FpSeq[ T ] with Monad[ FpList, T ] with Monoid
 
     override def partition( fn : T => Boolean ) : (FpList[ T ], FpList[ T ]) = FpList.partition( this )( fn )
 
-    override def collect[ B >: T ]( fn : PartialFunction[ T, B ] ) : FpList[ B ] = FpList.collect[ T, B ]( this )( fn )
+    override def collect[ B ]( fn : PartialFunction[ T, B ] ) : FpList[ B ] = FpList.collect[ T, B ]( this )( fn )
 
     override def sort[ B >: T ]( implicit ord : Ordering[ B ] ) : FpList[ B ] = FpList.sort[ T, B ]( this )( ord )
 
-    override def sortBy[ B >: T, C ]( fn : B => C )( implicit ord : Ordering[ C ] ) : FpList[ B ] = FpList.sortBy[ T, B, C ]( this )( fn )
+    override def sortBy[ C ]( fn : T => C )( implicit ord : Ordering[ C ] ) : FpList[ T ] = FpList.sortBy[ T, C ]( this )( fn )
 
     override def sortWith[ B >: T ]( cmp : (B, B) => Int )  : FpList[ B ] = FpList.sortWith[ T, B ]( this )( cmp )
 
-    override def zipWith[ B >: T, C ]( that : FpSeq[ C ] ) : FpSeq[ (B, C) ] = ???
+    override def zipWith[ B >: T, C ]( that : FpSeq[ C ] ) : FpList[ (B, C) ] = StackSafe.selfCall2[ FpList[ B ], FpSeq[ C ], FpList[ (B, C) ] ] {
+        thisFn =>
+            (l1, l2) => l1 match {
+                case FpNil => Result( FpNil )
+                case FpLs( v1, next1 ) => l2 match {
+                    case FpNil => Result( FpNil )
+                    case FpLs( v2, next2 ) => Call.from {
+                        thisFn( next1, next2 ).map( l => FpLs( (v1, v2), l ) )
+                    }
+                    case _ => Call.from( thisFn( l1, l2.toFpList ) )
+                }
+            }
+    } ( this, that )
 
-    override def zipWithIndex[ B >: T ] : FpSeq[ (B, Int) ] = ???
+    override def zipWithIndex[ B >: T ] : FpList[ (B, Int) ] = StackSafe.selfCall2[ FpList[ B ], Int, FpList[ (B, Int) ] ] {
+        thisFn =>
+            (l, i) => l match {
+                case FpNil => Result( FpNil )
+                case FpLs( v, next ) => Call.from {
+                    thisFn( next, i + 1 ).map( l => FpLs( (v, i), l ) )
+                }
+            }
+    } ( this, 0 )
 
-    override def withLeft[ B >: T ]( start : B )( fn : (B, B) => B ) : FpSeq[ B ] = ???
+    override def mapWithLeft[ B >: T ]( start : B )( fn : (B, B) => B ) : FpList[ B ] = {
+        ( start +: this ).zipWith( this ).map( t => fn( t._1, t._2 ) )
+    }
 
-    override def withRight[ B >: T ]( end : B )( fn : (B, B) => B ) : FpSeq[ B ] = ???
+    override def mapWithRight[ B >: T ]( end : B )( fn : (B, B) => B ) : FpList[ B ] = {
+        this.zipWith( this.tailOption.getOrElse( FpNil ) :+ end ).map( t => fn( t._1, t._2 ) )
+    }
 
     def reduce[ B >: T ]( fn : (B, B) => B ) : FpOption[ B ] = FpList.reduce[ B ]( this )( fn )
 
@@ -107,14 +131,32 @@ sealed trait FpList[ +T ] extends FpSeq[ T ] with Monad[ FpList, T ] with Monoid
 
 }
 
-case class FpLs[ +T ]( head : T, tail : FpList[ T ] ) extends FpList[ T ]
+case class FpLs[ +T ]( head : T, tail : FpList[ T ] ) extends FpList[ T ] {
+    override final def equals( obj : Any ) : Boolean = obj match {
+        case ls : FpList[ _ ] => StackSafe.selfCall2[ FpList[ T ], FpList[ _ ], Boolean ] {
+            thisFn => (thisL, thatL) => thatL match {
+                case FpNil => thisL match {
+                    case FpNil => Result( true )
+                    case _ => Result( false )
+                }
+                case FpLs( thatV, thatNext ) => thisL match {
+                    case FpLs( thisV, thisNext ) if ( thisV == thatV ) => Call.from {
+                        thisFn( thisNext, thatNext )
+                    }
+                    case _ => Result( false )
+                }
+            }
+        } ( this, ls )
+        case _ => false
+    }
+}
 
 case object FpNil extends FpList[ Nothing ]
 
 object FpList
   extends MonadStatic[ FpList ]
     with WithTransformer[ FpList ]
-    with MonoidCovariantStatic[ FpList ] {
+    with TypedMonoidStatic[ FpList ] {
 
     def apply : FpNil.type = FpNil
 
@@ -144,7 +186,7 @@ object FpList
             case Nil => Result( FpNil )
             case v :: Nil => Result( unit( v ) )
             case v :: fpList => Call.from {
-                thisFn( fpList ).map( _ :+ v )
+                thisFn( fpList ).map( v +: _ )
             }
         }
     }
@@ -229,17 +271,18 @@ object FpList
     def reverse[ T ] : FpList[ T ] => FpList[ T ] = StackSafe.selfCall[ FpList[ T ], FpList[ T ] ] {
         thisFn => {
             case FpNil => Result( FpNil )
-            case l@FpLs( FpNil, _ ) => Result( l )
+            case l@FpLs( _, FpNil ) => Result( l )
             case FpLs( v, next ) => Call.from {
-                thisFn( next ).map( rvdNext => ( v +: FpNil ) :++ rvdNext )
+                thisFn( next ).map( rvdNext => rvdNext ++: ( v +: FpNil ) )
             }
         }
     }
 
-    def length[ T ] : FpList[ T ] => FpOption[ Int ] = StackSafe.selfCall[ FpList[ T ], FpOption[ Int ] ] {
+    def length[ T ] : FpList[ T ] => Int = StackSafe.selfCall[ FpList[ T ], Int ] {
         thisFn => {
-            case FpNil => Result( FpSome( 0 ) )
-            case FpLs( _, t ) => Call.from( thisFn( t ).map( _.map( _ + 1 ) ) )
+            case FpNil => Result( 0 )
+            case FpLs( v, FpNil ) => Result( 1 )
+            case FpLs( _, t ) => Call.from( thisFn( t ).map( 1 + _ ) )
         }
     }
 
@@ -263,25 +306,23 @@ object FpList
                 }
     }
 
-    private def takeLast[ A ]( list : FpList[ A ] )( num : Int ) : FpList[ A ] = StackSafe.selfCall2[ FpList[ A ], Int, FpList[ A ] ] {
+    private def takeFirst[ A ]( list : FpList[ A ] )( num : Int ) : FpList[ A ] = StackSafe.selfCall2[ FpList[ A ], Int, FpList[ A ] ] {
         thisFn => ( l, n ) =>
             if ( n <= 0 ) Result( FpNil )
             else l match {
                 case FpNil => Result( FpNil )
                 case FpLs( v, FpNil ) => Result( v +: FpNil)
                 case FpLs( v, next ) => Call.from {
-                    thisFn( next, n - 1 ).map( _ :++ ( v +: FpNil ) )
+                    thisFn( next, n - 1 ).map( v +: _ )
                 }
             }
     }( list, num )
 
-    private def takeFirst[ A ]( list : FpList[ A ] )( num : Int ) : FpList[ A ] = takeLast( list.reverse )( num ).reverse
+    private def takeLast[ A ]( list : FpList[ A ] )( num : Int ) : FpList[ A ] = takeFirst( list.reverse )( num ).reverse
 
-    def take[ T ]( list : FpList[ T ] )( num : Int ) : FpList[ T ] =
-        if ( num <= 0 ) takeLast( list )( 0 - num )
-        else takeFirst( list )( num )
+    def take[ T ]( list : FpList[ T ] )( num : Int ) : FpList[ T ] = takeFirst( list )( num )
 
-    private def takeWhileLast[ A ]( list : FpList[ A ] )( fn : A => Boolean ) : FpList[ A ] = StackSafe {
+    private def takeWhileFirst[ A ]( list : FpList[ A ] )( fn : A => Boolean ) : FpList[ A ] = StackSafe {
         def takeWhileLastT( l : FpList[ A ] )( f : A => Boolean ) : StackSafe[ FpList[ A ] ] = l match {
             case FpNil => Result( FpNil )
             case FpLs( v, next ) =>
@@ -292,37 +333,28 @@ object FpList
         takeWhileLastT( list )( fn )
     }
 
-    def takeWhileEnd[ T ]( list : FpList[ T ] )( fn : T => Boolean ) : FpList[ T ] =
-        takeWhileLast( list )( fn )
-
     def takeWhile[ T ]( list : FpList[ T ] )( fn : T => Boolean ) : FpList[ T ] =
-        takeWhileLast( list.reverse )( fn ).reverse
+        takeWhileFirst( list )( fn )
 
     @tailrec
-    private def dropLast[ A ]( list : FpList[ A ] )( num : Int ) : FpList[ A ] =
+    private def dropFirst[ A ]( list : FpList[ A ] )( num : Int ) : FpList[ A ] =
         if ( num <= 0 ) list
         else list match {
             case FpNil => FpNil
-            case FpLs( _, next ) => dropLast[ A ]( next )( num - 1 )
+            case FpLs( _, next ) => dropFirst[ A ]( next )( num - 1 )
         }
 
-    def drop[ T ]( list : FpList[ T ] )( num : Int ) : FpList[ T ] =
-        if ( num <= 0 ) dropLast( list )( 0 - num )
-        else dropLast( list.reverse )( num ).reverse
+    def drop[ T ]( list : FpList[ T ] )( num : Int ) : FpList[ T ] = dropFirst( list )( num )
 
     @tailrec
-    private def dropWhileLast[ A ]( list : FpList[ A ] )( fn : A => Boolean ) : FpList[ A ] = list match {
+    private def dropWhileFirst[ A ]( list : FpList[ A ] )( fn : A => Boolean ) : FpList[ A ] = list match {
         case FpNil => FpNil
         case FpLs( v, next ) =>
-            if ( fn( v ) ) dropWhileLast( next )( fn )
+            if ( fn( v ) ) dropWhileFirst( next )( fn )
             else v +: next
     }
 
-    def dropWhileEnd[ T ]( list : FpList[ T ] )( fn : T => Boolean ) : FpList[ T ] =
-        dropWhileLast( list )( fn )
-
-    def dropWhile[ T ]( list : FpList[ T ] )( fn : T => Boolean ) : FpList[ T ] =
-        dropWhileLast( list.reverse )( fn ).reverse
+    def dropWhile[ T ]( list : FpList[ T ] )( fn : T => Boolean ) : FpList[ T ] = dropWhileFirst( list )( fn )
 
     def toList[ T ]( list : FpList[ T ] ) : List[ T ] = list match {
         case FpNil => Nil
@@ -363,24 +395,13 @@ object FpList
         makeDistinctT( list )
     }
 
-    def distinct[ T ]( list : FpList[ T ] ) : FpList[ T ] = makeDistinct( list.reverse ).reverse
+    def distinct[ T ]( list : FpList[ T ] ) : FpList[ T ] = makeDistinct( list )
 
     def partition[ T ]( list : FpList[ T ] )( fn : T => Boolean ) : (FpList[ T ], FpList[ T ]) = {
-        StackSafe.selfCall3[ FpList[ T ], FpList[ T ], FpList[ T ], (FpList[ T ], FpList[ T ]) ] {
-            thisFn =>
-                (filteredIn, filteredOut, l) => l match {
-                    case FpNil => Result( (filteredIn, filteredOut) )
-                    case FpLs( x, next ) if ( fn( x ) ) => Call.from {
-                        thisFn(x +: filteredIn, filteredOut, next )
-                    }
-                    case FpLs( x, next ) => Call.from {
-                        thisFn(filteredIn, x +: filteredOut, next )
-                    }
-                }
-        }( FpNil, FpNil, list )
+        (filter( list )( fn ), filter( list )( v => !fn( v ) ))
     }
 
-    def collect[ T, B >: T ]( list : FpList[ T ] )( fn : PartialFunction[ T, B ] ) : FpList[ B ] = flatMap( list )( v => {
+    def collect[ T, B ]( list : FpList[ T ] )( fn : PartialFunction[ T, B ] ) : FpList[ B ] = flatMap( list )( v => {
         if ( fn.isDefinedAt( v ) ) fn( v ) +: FpNil
         else FpNil
     } )
@@ -401,7 +422,7 @@ object FpList
             }
         }( list )
 
-    def sortBy[ T, B >: T, C ]( list : FpList[ T ] )( fn : B => C )( implicit ord : Ordering[ C ] ) : FpList[ B ] = {
+    def sortBy[ T, C ]( list : FpList[ T ] )( fn : T => C )( implicit ord : Ordering[ C ] ) : FpList[ T ] = {
         sort( list )( Ordering.by( fn ) )
     }
 

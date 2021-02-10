@@ -1,12 +1,12 @@
 package org.hungerford.fp.impure
 
-import org.hungerford.fp.basic.{FpFailure, FpNone, FpOption, FpSome, FpSuccess, FpTry}
+import org.hungerford.fp.basic.{FpFailure, FpNone, FpOption, FpSome, FpSuccess}
 import org.hungerford.fp.collections.{FpList, FpNil, FpSeq}
 import org.hungerford.fp.recursion.{Call, Result, StackSafe}
-import org.hungerford.fp.types.{Monad, MonadStatic}
+import org.hungerford.fp.types.{Monad, MonadStatic, TypedMonoid, TypedMonoidStatic}
 
-sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with Monad[ FpImpureList, T ] {
-    override val static : MonadStatic[ FpImpureList ] = FpImpureList
+sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with Monad[ FpImpureList, T ] with TypedMonoid[ FpImpureList, T ] {
+    override val static : MonadStatic[ FpImpureList ] with TypedMonoidStatic[ FpImpureList ] = FpImpureList
 
     private[ impure ] val impure : FpImpure[ FpEvaluatedImpureList[ T ] ]
 
@@ -37,7 +37,7 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with Monad[ FpImpureList, T ]
                 case FpImpureNil => Result( FpImpureList.makeImpure( FpImpureNil ) )
                 case fail@FpImpureFail( _ ) => Result( FpImpureList.makeImpure( fail ) )
                 case FpUnevaluatedImpureList( nextEval ) => Result( FpUnevaluatedImpureList(
-                    nextEval.flatMap( ( nextIl => FpImpure.fromSs( Call.from( thisFn( i - 1, nextIl ).flatMap( _.impure.ss ) ) ) ) )
+                    nextEval.flatMap( nextIl => FpImpure.fromSs( Call.from( thisFn( i - 1, nextIl ).flatMap( _.impure.ss ) ) ) )
                 ) )
                 case FpImpureListEval( head, tail ) => Result( FpUnevaluatedImpureList(
                     FpImpure.fromSs( thisFn( i, tail ).flatMap( _.impure.ss ) ).map( ll => FpImpureListEval( head, FpImpureList.makeImpure( ll ) ) )
@@ -73,7 +73,7 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with Monad[ FpImpureList, T ]
         thisFn =>
             (i, ll) => if ( i < 0 ) Result( FpNone ) else ll match {
                 case FpImpureNil => Result( FpNone )
-                case fail@FpImpureFail( _ ) => Result( FpNone )
+                case FpImpureFail( _ ) => Result( FpNone )
                 case FpImpureListEval( v, next ) =>
                     if ( i == 0 ) Result( FpSome( v ) ) else Call.from {
                         thisFn( i - 1, next )
@@ -138,6 +138,8 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with Monad[ FpImpureList, T ]
         case FpImpureFail( _ ) => FpNone
         case FpImpureListEval( _, tail ) => FpSome( tail )
     }
+
+    override def tailOrNil : FpSeq[ T ] = tailOption.getOrElse( FpImpureNil )
 
     override def lastOption : FpOption[ T ] = StackSafe.selfCall2[ FpOption[ T ], FpImpureList[ T ], FpOption[ T ] ] {
         thisFn =>
@@ -236,22 +238,19 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with Monad[ FpImpureList, T ]
     }( this )
 
 
-    override def drop( num : Int ) : FpImpureList[ T ] = {
-        val res = StackSafe.selfCall2[ Int, FpImpureList[ T ], FpImpureList[ T ] ] {
-            thisFn =>
-                (i, ll) => if ( i < 1 ) Result( ll ) else ll match {
-                    case FpImpureNil => Result( FpImpureNil )
-                    case fail@FpImpureFail( _ ) => Result( fail )
-                    case FpImpureListEval( v, next ) => Call.from {
-                        thisFn( i - 1, next ).map( nextL => FpImpureListEval( v, nextL ) )
-                    }
-                    case FpUnevaluatedImpureList( evalImpure ) => Result( FpUnevaluatedImpureList(
-                        evalImpure.flatMap( v => FpImpure.fromSs( thisFn( i , v ).flatMap( _.impure.ss ) ) )
-                    ) )
+    override def drop( num : Int ) : FpImpureList[ T ] = StackSafe.selfCall2[ Int, FpImpureList[ T ], FpImpureList[ T ] ] {
+        thisFn =>
+            (i, ll) => if ( i < 1 ) Result( ll ) else ll match {
+                case FpImpureNil => Result( FpImpureNil )
+                case fail@FpImpureFail( _ ) => Result( fail )
+                case FpImpureListEval( v, next ) => Call.from {
+                    thisFn( i - 1, next )
                 }
-        }( if ( num < 0 ) -num else num, if ( num < 0 ) this else this.reverse )
-        if ( num < 0 ) res else res.reverse
-    }
+                case FpUnevaluatedImpureList( evalImpure ) => Result( FpUnevaluatedImpureList(
+                    evalImpure.flatMap( v => FpImpure.fromSs( thisFn( i , v ).flatMap( _.impure.ss ) ) )
+                ) )
+            }
+    }( num, this )
 
     override def dropWhile( fn : T => Boolean ) : FpImpureList[ T ] = StackSafe.selfCall[ FpImpureList[ T ], FpImpureList[ T ] ] {
         thisFn => {
@@ -291,7 +290,7 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with Monad[ FpImpureList, T ]
                         thisFn( next, set )
                     }
                     case FpImpureListEval( v, next ) => Call.from {
-                        thisFn( next, set + v ).map( _ :+ v )
+                        thisFn( next, set + v ).map( v +: _ )
                     }
                     case FpUnevaluatedImpureList( evalImpure ) => Result( FpUnevaluatedImpureList(
                         evalImpure.flatMap( v => FpImpure.fromSs( thisFn( v, set ).flatMap( _.impure.ss )  ) )
@@ -303,13 +302,25 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with Monad[ FpImpureList, T ]
         (this.filter( fn ), this.filter( t => !fn( t ) ))
     }
 
-    override def collect[ B >: T ]( fn : PartialFunction[ T, B ] ) : FpImpureList[ B ] = ???
+    override def collect[ B ]( fn : PartialFunction[ T, B ] ) : FpImpureList[ B ] = StackSafe.selfCall[ FpImpureList[ T ], FpImpureList[ B ] ] {
+        thisFn => {
+            case FpImpureNil => Result( FpImpureNil )
+            case fail@FpImpureFail( _ ) => Result( fail )
+            case FpImpureListEval( v, next ) if fn.isDefinedAt( v ) => Call.from {
+                thisFn( next ).map( ll => FpImpureListEval( fn( v ), ll ) )
+            }
+            case FpImpureListEval( v, next ) => Call.from( thisFn( next ) )
+            case FpUnevaluatedImpureList( evalImpure ) => Result( FpUnevaluatedImpureList(
+                evalImpure.flatMap( v => FpImpure.fromSs( thisFn( v ).flatMap( _.impure.ss ) ) )
+            ) )
+        }
+    } ( this )
 
     override def sort[ B >: T ]( implicit ord : Ordering[ B ] ) : FpImpureList[ B ] = {
         FpImpureList.makeImpure( FpImpureList.fromFpList( toFpList.asInstanceOf[ FpList[ B ] ].sort ) )
     }
 
-    override def sortBy[ B >: T, C ]( fn : B => C )( implicit ord : Ordering[ C ] ) : FpImpureList[ B ] = ???
+    override def sortBy[ C ]( fn : T => C )( implicit ord : Ordering[ C ] ) : FpImpureList[ T ] = sort( Ordering.by( fn ) )
 
     override def sortWith[ B >: T ]( cmp : (B, B) => Int ) : FpImpureList[ B ] = sort( new Ordering[ B ] {
         override def compare( x : B, y : B ) : Int = cmp( x, y )
@@ -354,13 +365,11 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with Monad[ FpImpureList, T ]
             }
     }( 0, this )
 
-    override def withLeft[ B >: T ]( start : B )( fn : (B, B) => B ) : FpImpureList[ B ] = {
-        val zipped = ( this.headOption.map( v => static.unit(v, start) ).getOrElse( FpImpureNil ) :++
-                       this.tailOption.getOrElse( FpImpureNil ).zipWith( this ) )
-        zipped.map( tup => fn( tup._1, tup._2 ) )
+    override def mapWithLeft[ B >: T ]( start : B )( fn : (B, B) => B ) : FpImpureList[ B ] = {
+        ( start +: this ).zipWith( this ).map( t => fn( t._1, t._2 ) )
     }
 
-    override def withRight[ B >: T ]( end : B )( fn : (B, B) => B ) : FpImpureList[ B ] = {
+    override def mapWithRight[ B >: T ]( end : B )( fn : (B, B) => B ) : FpImpureList[ B ] = {
         this.zipWith( this.tailOption.getOrElse( FpImpureNil ) :+ end ).map( tup => fn( tup._1, tup._2 ) )
     }
 
@@ -406,7 +415,7 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with Monad[ FpImpureList, T ]
             (str, ll) => if ( str.length > 100 ) Result( str + "..." ) else ll match {
                 case FpImpureNil =>
                     if ( str == "" ) Result( "FpImpureNil" )
-                    else Result( s"${str}, FpImpureNil" )
+                    else Result( s"$str, FpImpureNil" )
                 case FpImpureFail( t ) =>
                     if ( str == "" ) Result( s"FpImpureFail(${t.toString})")
                     else Result( s"${str}, FpImpureFail(${t.toString})")
@@ -425,7 +434,7 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with Monad[ FpImpureList, T ]
 
 case class FpUnevaluatedImpureList[ +T ]( override val impure : FpImpure[ FpEvaluatedImpureList[ T ] ] ) extends FpImpureList[ T ] {
     override def equals( obj : Any ) : Boolean = obj match {
-        case ll : FpImpureList[ _ ] => this.toList == ll.toList
+        case ll : FpImpureList[ _ ] => this.toFpList == ll.toFpList
         case _ => false
     }
 }
@@ -442,12 +451,12 @@ case object FpImpureNil extends FpImpureEnd
 
 case class FpImpureListEval[ +T ]( head : T, tail : FpImpureList[ T ] ) extends FpEvaluatedImpureList[ T ] {
     override def equals( obj : Any ) : Boolean = obj match {
-        case ll : FpImpureList[ _ ] => this.toList == ll.toList
+        case ll : FpImpureList[ _ ] => this.toFpList == ll.toFpList
         case _ => false
     }
 }
 
-object FpImpureList extends MonadStatic[ FpImpureList ] {
+object FpImpureList extends MonadStatic[ FpImpureList ] with TypedMonoidStatic[ FpImpureList ] {
 
     def apply[ A ]( ele : A ) : FpImpureList[ A ] = unit( ele )
 
@@ -506,4 +515,6 @@ object FpImpureList extends MonadStatic[ FpImpureList ] {
     }( a )
 
     override def unit[ A ]( ele : A ) : FpImpureList[ A ] = ele +: FpImpureNil
+
+    override def empty : FpImpureList[ _ ] = FpImpureNil
 }

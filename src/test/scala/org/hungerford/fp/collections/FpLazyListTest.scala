@@ -1,7 +1,7 @@
 package org.hungerford.fp.collections
 
 import org.hungerford.fp.basic.FpSome
-import org.hungerford.fp.types.MonadTest
+import org.hungerford.fp.types.{MonadTest, TypedMonoidTest}
 
 class FpLazyListMonadTest extends MonadTest(
     "FpLazyList",
@@ -38,4 +38,18 @@ class FpLazyListMonadTest extends MonadTest(
 class FpLazyListSeqTest extends FpSeqTest[ FpLazyList ](
     "FpLazyList",
     List( FpLazyNil ),
+)
+
+class FpLazyListMonoidTest extends TypedMonoidTest[ FpLazyList, Int ](
+    "FpLazyList",
+    FpLazyList,
+    List(
+        1 +: 2 +: 3 +: 4 +: 5 +: FpLazyNil,
+        1 +:: 2 +:: 3 +:: 4 +:: 5 +:: FpLazyNil,
+        -2342 +: 34532 +: FpLazyNil,
+        FpLazyNil,
+        0 +: FpLazyNil,
+        199 +: -300 +: 342334 +:: -4323423 +: 43523542 +: FpLazyNil,
+        (1 +:: 2 +:: 3 +:: FpLazyNil).times( 5000 ),
+    )
 )
