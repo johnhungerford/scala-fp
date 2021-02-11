@@ -7,14 +7,12 @@ import org.hungerford.fp.types.{Monad, MonadStatic, TypedMonoid, TypedMonoidStat
 import scala.concurrent.ExecutionContext
 
 // An effects type
-sealed trait FpImpure[ +T ] extends Monad[ FpImpure, T ] with TypedMonoid[ FpImpure, T ] {
+sealed trait FpImpure[ +T ] extends Monad[ FpImpure, T ] {
     private[impure] val ss : StackSafe[ FpTry[ T ] ]
 
     def run : () => FpTry[ T ] = () => ss.run()
 
-    override val static : MonadStatic[ FpImpure ] with TypedMonoidStatic[ FpImpure ] = FpImpure
-
-    def >>[ U ]( fpImpure : FpImpure[ U ] ) : FpImpure[ U ] = this.flatMap( _ => fpImpure )
+    override val static : MonadStatic[ FpImpure ] = FpImpure
 
     def loop( times : Int ) : FpImpure[ T ] = FpImpure.loop( times )( this )
 
@@ -43,7 +41,7 @@ sealed trait FpImpure[ +T ] extends Monad[ FpImpure, T ] with TypedMonoid[ FpImp
     }
 }
 
-object FpImpure extends MonadStatic[ FpImpure ] with TypedMonoidStatic[ FpImpure ] {
+object FpImpure extends MonadStatic[ FpImpure ] {
 
     def fromTry[ A ]( block : => FpTry[ A ] ) : FpImpure[ A ] = new FpImpure[A] {
         override private[impure] val ss : StackSafe[ FpTry[ A ] ] = Call.from( Result( block ) )
@@ -85,10 +83,6 @@ object FpImpure extends MonadStatic[ FpImpure ] with TypedMonoidStatic[ FpImpure
         } )
     }
 
-    override def empty : FpImpure[ Unit ] = FpImpure[ Unit ]( () )
-
     override def unit[ A ]( ele : A ) : FpImpure[ A ] = FpImpure ( ele )
 
-    override def combine[ B ]( a : FpImpure[ B ],
-                               b : FpImpure[ B ] ) : FpImpure[ B ] = a >> b
 }

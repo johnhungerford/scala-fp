@@ -13,12 +13,12 @@ trait Logger[ +T ] extends Monad[ Logger, T ] {
     val value : FpOption[ T ]
 
     def record( msg : FpString ) : Logger[ T ] = new Logger[ T ] {
-        override val logs : FpList[ FpString ] = outerThis.logs :+ msg
+        override val logs : FpList[ FpString ] = msg +: outerThis.logs
         override val value : FpOption[ T ] = outerThis.value
     }
 
     def record( msgs : FpList[ FpString ] ) : Logger[ T ] = new Logger[ T ] {
-        override val logs : FpList[ FpString ] = outerThis.logs :++ msgs
+        override val logs : FpList[ FpString ] = msgs :++ outerThis.logs
         override val value : FpOption[ T ] = outerThis.value
     }
 
@@ -27,12 +27,12 @@ trait Logger[ +T ] extends Monad[ Logger, T ] {
 }
 
 case class Log( msg : FpString ) extends Logger[ Unit ] {
-    val logs : FpList[ FpString ] = FpNil :+ msg
+    val logs : FpList[ FpString ] = msg +: FpNil
     override val value : FpOption[ Unit ] = FpSome( () )
 }
 
 case class Logged[ +T ]( valueIn : T, msg : FpString ) extends Logger[ T ] {
-    override val logs : FpList[ FpString ] = FpNil :+ msg
+    override val logs : FpList[ FpString ] = msg +: FpNil
     override val value : FpOption[ T ] = FpSome( valueIn )
 }
 
@@ -53,12 +53,12 @@ object Logger extends MonadStatic[ Logger ] {
             case FpSome( x : A ) =>
                 val res : Logger[ B ] = fn( x )
                 println( res )
-                Logger[ B ]( res.value, a.logs :++ res.logs )
+                Logger[ B ]( res.value, res.logs :++ a.logs)
         }
     }
 
     override def unit[ A ]( ele : A ) : Logger[ A ] = new Logger[A] {
-        override val logs : FpList[ FpString ] = FpNil :+ FpString( "" )
+        override val logs : FpList[ FpString ] = FpString( "" ) +: FpNil
         override val value : FpOption[ A ] = FpSome( ele )
     }
 }

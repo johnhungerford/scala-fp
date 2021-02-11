@@ -408,6 +408,23 @@ sealed trait FpImpureList[ +T ] extends FpSeq[ T ] with Monad[ FpImpureList, T ]
             }
     }( FpImpure( aggregate ), this )
 
+    def flatFoldLeft[ A, B >: T ]( aggregate : A )( fn : (A, B) => FpImpure[ A ] ) : FpImpure[ A ] = StackSafe.selfCall2[ FpImpure[ A ], FpImpureList[ B ], FpImpure[ A ] ] {
+        thisFn =>
+            ( aggImp, ll ) => ll match {
+                case FpImpureNil => Result( aggImp )
+                case FpImpureFail( _ ) => Result( aggImp )
+                case FpImpureListEval( v, next ) => Call.from {
+                    thisFn( aggImp.flatMap( ( a : A ) => fn( a, v ) ), next )
+                }
+                case FpUnevaluatedImpureList( evalImpure ) => Call.from {
+                    evalImpure.ss.flatMap {
+                        case FpSuccess( v ) => thisFn( aggImp, v )
+                        case FpFailure( _ ) => Result( aggImp )
+                    }
+                }
+            }
+    }( FpImpure( aggregate ), this )
+
     def foldRight[ A, B >: T ]( aggregate : A )( fn : (A, B) => A ) : FpImpure[ A ] = reverse.foldLeft( aggregate )( fn )
 
     private def toStringInternal[ A ]( ll : FpImpureList[ A ] ) : String = StackSafe.selfCall2 [ String, FpImpureList[ A ], String ] {

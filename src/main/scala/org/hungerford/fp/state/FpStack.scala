@@ -1,6 +1,7 @@
-package org.hungerford.fp.collections
+package org.hungerford.fp.state
 
 import org.hungerford.fp.basic.{FpOption, FpState}
+import org.hungerford.fp.collections.{FpList, FpNil}
 
 sealed class FpStack[ T, U  ]( fn : FpList[ T ] => (U, FpList[ T ])) extends FpState[ FpList[ T ], U ]( fn )
 
