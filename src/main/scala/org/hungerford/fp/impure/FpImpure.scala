@@ -2,7 +2,7 @@ package org.hungerford.fp.impure
 
 import org.hungerford.fp.basic.{FpFailure, FpSuccess, FpTry}
 import org.hungerford.fp.recursion.{Call, Result, StackSafe}
-import org.hungerford.fp.types.{Monad, MonadStatic, TypedMonoid, TypedMonoidStatic}
+import org.hungerford.fp.types.{Monad, MonadStatic}
 
 import scala.concurrent.ExecutionContext
 
